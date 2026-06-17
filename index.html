@@ -33,29 +33,34 @@
       margin:0; padding:18px;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       background:
-        radial-gradient(circle at 50% -20%, rgba(231,183,91,0.28), transparent 34%),
-        linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px),
-        linear-gradient(180deg, rgba(22,52,35,0.92) 0%, rgba(13,31,23,0.96) 55%, #101812 100%);
-      background-size: auto, 42px 42px, auto;
+        linear-gradient(180deg, rgba(12,18,13,0.34), rgba(12,18,13,0.78)),
+        url("scene-temple.jpg") center top / cover fixed,
+        #172019;
       color:var(--text);
       min-height:100vh;
     }
     .wrap{ max-width:1060px; margin:0 auto; display:grid; gap:14px; }
     .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .card{
-      background: var(--surface);
+      background: rgba(247,239,224,0.93);
       border:1px solid var(--line);
       border-radius:8px;
       padding:16px;
       box-shadow: 0 18px 48px rgba(5,10,6,0.28);
+      backdrop-filter: blur(8px);
     }
     .masthead{
       position:relative;
       overflow:hidden;
-      border-color: rgba(184,138,55,0.62);
+      min-height:255px;
+      display:grid;
+      align-items:end;
+      border-color: rgba(231,183,91,0.54);
       background:
-        linear-gradient(180deg, rgba(123,33,24,0.10), transparent 38%),
-        var(--surface);
+        linear-gradient(90deg, rgba(12,18,13,0.82), rgba(12,18,13,0.40) 52%, rgba(12,18,13,0.18)),
+        linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.42)),
+        url("scene-carry.jpg") center center / cover;
+      color:#f7efe0;
     }
     .masthead::before{
       content:"";
@@ -68,23 +73,32 @@
       content:"";
       position:absolute; right:16px; top:16px;
       width:74px; height:42px;
-      border-top:7px solid rgba(37,27,19,0.18);
+      border-top:7px solid rgba(247,239,224,0.22);
       border-left:28px solid transparent;
       border-right:28px solid transparent;
       opacity:.65;
     }
+    .masthead h1{ color:#f7efe0; text-shadow:0 2px 14px rgba(0,0,0,0.52); }
+    .masthead .small{ color:#e6c98c; text-shadow:0 1px 10px rgba(0,0,0,0.50); }
     .brand{
       display:flex;
       gap:16px;
       align-items:center;
       padding-right:72px;
+      width:min(620px, 100%);
+      padding:14px;
+      border:1px solid rgba(231,183,91,0.26);
+      border-radius:8px;
+      background: rgba(17,25,19,0.58);
+      backdrop-filter: blur(6px);
     }
     .brand-logo{
       width:112px;
       height:112px;
       object-fit:contain;
       flex:0 0 auto;
-      mix-blend-mode:multiply;
+      border-radius:8px;
+      box-shadow:0 10px 28px rgba(0,0,0,0.28);
     }
     .brand-copy{ min-width:0; }
     @media (max-width: 520px){

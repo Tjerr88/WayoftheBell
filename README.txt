@@ -15,6 +15,8 @@ FILES THAT MUST BE PRESENT
 - manifest.json
 - service-worker.js
 - brand-logo.png
+- scene-temple.jpg
+- scene-carry.jpg
 - favicon-64.png
 - icon-192.png
 - icon-512.png
