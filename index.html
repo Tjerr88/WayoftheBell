@@ -568,7 +568,7 @@
     return `2 x ${isBallisticExtraExercise(name) ? 10 : 5}`;
   }
 
-  // --- Training session counter (FULL/MINI only)
+  // --- Practice session counter
   function loadTrainCount(){ return loadJSON(LS_TRAIN_COUNT_KEY) || { n: 0, checkpointDone: false }; }
   function saveTrainCount(v){ saveJSON(LS_TRAIN_COUNT_KEY, v); }
 
@@ -1328,6 +1328,22 @@ function computeBand(total){
     return { band:'REC', label:'0-7', cls:'rec' };
   }
 
+  function applyPracticeRhythm(gateMode, nextSessionNumber){
+    if(gateMode === 'RECOVERY') return { mode:'RECOVERY', reason:'gate' };
+    const n = Math.max(1, Number(nextSessionNumber) || 1);
+    if(n % 8 === 0) return { mode:'RECOVERY', reason:'rhythm-recovery' };
+    if(n % 4 === 0) return { mode:'MINI', reason:'rhythm-mini' };
+    return { mode:gateMode, reason:null };
+  }
+
+  function countCompletedPracticeSession(sessionNumber){
+    const tc = loadTrainCount();
+    const current = tc.n || 0;
+    tc.n = Math.max(current, Number(sessionNumber) || current);
+    saveTrainCount(tc);
+    updateTrainPill();
+  }
+
   function renderGate(existing){
     const _raw = existing?.scores ?? { soreness:null, energy:null, sleep:null };
     const scores = { soreness: (_raw.soreness ?? null), energy: (_raw.energy ?? null), sleep: (_raw.sleep ?? null) };
@@ -1407,35 +1423,29 @@ function computeBand(total){
     btnStart.addEventListener('click', () => {
       const total = Object.values(scores).reduce((a,b)=>a+b,0);
       const band = computeBand(total).band;
-      let mode = (band === 'GOOD') ? 'FULL' : (band === 'MID') ? 'MINI' : 'RECOVERY';
-
-      // Hard cap: after 3x FULL in a row, force a mobility day.
-      const fs = loadFullStreak();
-      const forcedRecovery = (fs.n >= 3 && mode === 'FULL');
-      if(forcedRecovery) mode = 'RECOVERY';
+      const gateMode = (band === 'GOOD') ? 'FULL' : (band === 'MID') ? 'MINI' : 'RECOVERY';
+      const tc = loadTrainCount();
+      const sessionNumber = (tc.n || 0) + 1;
+      const rhythm = applyPracticeRhythm(gateMode, sessionNumber);
+      const mode = rhythm.mode;
 
       // lock gate for today
-      saveDayState({ day: todayKey(), scores, total, modeLocked: mode, forcedRecovery });
+      saveDayState({ day: todayKey(), scores, total, modeLocked: mode, rhythmReason: rhythm.reason, sessionNumber });
 
       // create active state
       if(mode === 'FULL' || mode === 'MINI'){
         const s = generateSession(mode);
           // save memory and count immediately on generation
           saveMemory(s.memNext);
-          const tc = loadTrainCount();
-          tc.n = (tc.n || 0) + 1;
-          saveTrainCount(tc);
-          updateTrainPill();
           const practiceMode = getPracticeMode();
           const trainingStyle = getTrainingStyle();
-          const sessionNumber = (tc.n || 1);
         saveActive({ day: todayKey(), mode, phase:'TRAINING', session:s, practiceMode, trainingStyle, sessionNumber, timers:{
           circuitLeft: getCircuitSeconds(mode, practiceMode, sessionNumber),
           carryLeft: mode === 'FULL' ? DUR.carrySec : undefined,
           zone2Left: mode === 'MINI' ? DUR.zone2Sec : undefined,
         }});
       } else {
-        saveActive({ day: todayKey(), mode, phase:'MOBILITY', timers:{ mobilityLeft: DUR.mobilitySec }, mobilityChecks: {} });
+        saveActive({ day: todayKey(), mode, phase:'MOBILITY', sessionNumber, timers:{ mobilityLeft: DUR.mobilitySec }, mobilityChecks: {} });
       }
 
       boot();
@@ -1971,6 +1981,10 @@ function computeBand(total){
     if(a && (a.mode === 'FULL' || a.mode === 'MINI') && a.session && a.session.memNext){
     }
 
+    if(a && typeof a.sessionNumber === 'number'){
+      countCompletedPracticeSession(a.sessionNumber);
+    }
+
     // If today's session was not FULL/MINI training, break FULL streak
     if(a && !(a.mode === 'FULL' || a.mode === 'MINI')){
       const fs = loadFullStreak();
@@ -2061,24 +2075,20 @@ function computeBand(total){
       document.getElementById('btnStartFromLock').addEventListener('click', () => {
         // create active based on locked mode
         const mode = day.modeLocked;
+        const sessionNumber = day.sessionNumber || ((loadTrainCount().n || 0) + 1);
         if(mode === 'FULL' || mode === 'MINI'){
           const s = generateSession(mode);
           // save memory and count immediately on generation
           saveMemory(s.memNext);
-          const tc = loadTrainCount();
-          tc.n = (tc.n || 0) + 1;
-          saveTrainCount(tc);
-          updateTrainPill();
           const practiceMode = getPracticeMode();
           const trainingStyle = getTrainingStyle();
-          const sessionNumber = (tc.n || 1);
           saveActive({ day: todayKey(), mode, phase:'TRAINING', session:s, practiceMode, trainingStyle, sessionNumber, timers:{
             circuitLeft: getCircuitSeconds(mode, practiceMode, sessionNumber),
             carryLeft: mode === 'FULL' ? DUR.carrySec : undefined,
             zone2Left: mode === 'MINI' ? DUR.zone2Sec : undefined,
           }});
         } else {
-          saveActive({ day: todayKey(), mode, phase:'MOBILITY', timers:{ mobilityLeft: DUR.mobilitySec }, mobilityChecks: {} });
+          saveActive({ day: todayKey(), mode, phase:'MOBILITY', sessionNumber, timers:{ mobilityLeft: DUR.mobilitySec }, mobilityChecks: {} });
         }
         boot();
       });
