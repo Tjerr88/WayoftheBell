@@ -474,10 +474,15 @@
   const DUR = { carrySec: 5*60, zone2Sec: 20*60, mobilitySec: 25*60 };
 
   const EVERYTHING_ELSE_NORMAL = [
-    "Leg Raise",
-    "Ab Wheel Rollout",
     "Bicep Curl",
-    "Tricep Extension"
+    "Tricep Extension",
+    "Lateral Raise",
+    "Ab Wheel Rollout",
+    "Beast Crawl",
+    "Dead Bug",
+    "Leg Raise",
+    "Side Bend",
+    "Wood Chopper"
   ];
 
   const LIB = {
@@ -506,20 +511,23 @@
   const CARRIES = ["Suitcase Carry","Front Rack Carry","Overhead Carry","Front Rack March","Cook Drill March","Get-Up"];
 
   const MOBILITY = [
-    { kind:"reps", label:"Windmill", value:"5x" },
-    { kind:"reps", label:"Half Kneeling Windmill", value:"5x" },
-    { kind:"reps", label:"Bent Press", value:"5x" },
-    { kind:"reps", label:"Mace 360", value:"10x" },
-    { kind:"reps", label:"Shield Cast", value:"10x" },
-    { kind:"reps", label:"Mace 10-2", value:"10x" },
-    { kind:"reps", label:"Clubbell Side Swing", value:"10x" },
-    { kind:"reps", label:"Clubbell Rotational Pullover to Pendulum", value:"10x" },
-    { kind:"reps", label:"Beast Crawl", value:"5x" },
-    { kind:"reps", label:"Lateral Crawl", value:"5x" },
-    { kind:"reps", label:"Dead Bug", value:"5x" },
-    { kind:"reps", label:"Bird Dog", value:"5x" },
-    { kind:"reps", label:"Side Bend", value:"5x" },
-    { kind:"reps", label:"Hip Airplane", value:"5x" },
+    { kind:"time", label:"Arm Bar", value:"30s" },
+    { kind:"reps", label:"Bent Arm Bar", value:"2/3" },
+    { kind:"reps", label:"Rib Pull", value:"3/5" },
+    { kind:"reps", label:"Bretzel", value:"3/5" },
+    { kind:"reps", label:"Windmill", value:"3/5" },
+    { kind:"reps", label:"Bent Press", value:"3/3" },
+    { kind:"reps", label:"Pump Stretch", value:"5/10" },
+    { kind:"reps", label:"Tactical Frog", value:"5/10" },
+    { kind:"reps", label:"CatCow", value:"5/10" },
+    { kind:"reps", label:"Overhead Hip Flexor Stretch", value:"10" },
+    { kind:"reps", label:"Prying Goblet Squat", value:"5" },
+    { kind:"reps", label:"Cossack Squat", value:"3/5" },
+    { kind:"reps", label:"Goodmorning Hamstring Stretch", value:"5/10" },
+    { kind:"reps", label:"Kettlebell Pull over", value:"5/10" },
+    { kind:"reps", label:"Get Up High Bridge", value:"3/5" },
+    { kind:"reps", label:"Tall kneeling Halo", value:"5" },
+    { kind:"reps", label:"Tall Kneeling Rotations", value:"3" },
   ];
 
   const leftCard = document.getElementById("leftCard");
@@ -1879,7 +1887,7 @@ function computeBand(total){
   // -------------------------
   function renderMobility(active){
     leftCard.innerHTML = `
-      <h2>Loaded Mobility</h2>
+      <h2>Loaded Kettlebell Mobility</h2>
       <div class="small">Follow the routine in order. Check off what you completed.</div>
       <div style="display:grid; gap:10px; margin-top:10px;" id="mobList"></div>
       <div class="hr"></div>

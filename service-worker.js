@@ -1,4 +1,4 @@
-const CACHE_NAME = "chopwood-v15";
+const CACHE_NAME = "chopwood-v16";
 const APP_SHELL = [
   "./",
   "./index.html",
