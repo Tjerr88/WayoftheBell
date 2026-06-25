@@ -7,11 +7,11 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Chop Wood" />
+  <meta name="apple-mobile-web-app-title" content="Way of the Bell" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="64x64" href="favicon-64.png" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <title>Chop Wood &amp; Carry Water - 60 Day Practice</title>
+  <title>Way of the Bell - The Practice Is the Path</title>
   <style>
     :root{
       --bg:#172019;
@@ -425,7 +425,7 @@
 
 <div id="appModal" aria-hidden="true">
   <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalText">
-    <div class="modalTitle" id="modalTitle">Chop Wood &amp; Carry Water</div>
+    <div class="modalTitle" id="modalTitle">Way of the Bell</div>
     <p class="modalText" id="modalText">-</p>
     <div id="modalBody"></div>
     <div class="modalRow" id="modalActions"></div>
@@ -436,10 +436,10 @@
 <div class="wrap">
   <div class="card masthead">
     <div class="brand">
-      <img class="brand-logo" src="brand-logo.png" alt="Chop Wood and Carry Water logo" />
+      <img class="brand-logo" src="brand-logo.png" alt="Way of the Bell logo" />
       <div class="brand-copy">
-        <h1>Chop Wood &amp; Carry Water</h1>
-        <p class="small">Enter the gate. Do the work. Release the outcome.</p>
+        <h1>Way of the Bell</h1>
+        <p class="small">The practice is the path.</p>
       </div>
     </div>
     <div class="hero-actions">
@@ -665,10 +665,10 @@
     });
     document.getElementById("btnExercisePreviewClose").addEventListener("click", () => closeModal());
   }
-  function getCircuitSeconds(mode, practiceMode, sessionNumber){
+  function getCircuitSeconds(mode, practiceMode, trainingNumber){
     if(mode === "MINI") return 20*60;
     if(practiceMode !== "progression") return 20*60;
-    const n = Math.max(1, Number(sessionNumber) || 1);
+    const n = Math.max(1, Number(trainingNumber) || 1);
     if(n <= 20) return 20*60;
     if(n <= 40) return 25*60;
     return 30*60;
@@ -739,17 +739,9 @@
   function updateTrainPill(){
     const tc = loadTrainCount();
     const n = tc.n || 0;
-    const pc = loadProgressCount();
-    const pn = pc.n || 0;
     const el = document.getElementById("trainPill");
     if(!el) return;
-    const progressionStyle = ["strength","hypertrophy"].includes(getTrainingStyle());
-    if(getPracticeMode() === "progression" && progressionStyle){
-      const suffix = pn >= 60 ? " - Checkpoint" : "";
-      el.innerHTML = `Practice: <strong>${n}</strong> | Progression: <strong>${pn} / 60</strong>${suffix}`;
-    } else {
-      el.innerHTML = `Practice: <strong>${n}</strong>`;
-    }
+    el.innerHTML = `Practice: <strong>${n}</strong>`;
   }
 
   function initTrainPillEditor(){
@@ -821,7 +813,7 @@
     if(modalActionsEl) modalActionsEl.innerHTML = "";
   }
 
-  function openModal({title="Chop Wood & Carry Water", text="-", bodyHTML="", actionsHTML=""} = {}){
+  function openModal({title="Way of the Bell", text="-", bodyHTML="", actionsHTML=""} = {}){
     if(!appModal) return;
     if(modalTitleEl) modalTitleEl.textContent = title;
     if(modalTextEl) modalTextEl.innerHTML = text;
@@ -835,7 +827,7 @@
     appModal.addEventListener("click", (e) => { if(e.target === appModal) closeModal(); });
   }
 
-  // --- Checkpoint: progression cycle check (after 60 completed sessions)
+  // --- Checkpoint: progression cycle check (after 60 completed FULL/MINI sessions)
   function showCheckpointModal(){
     const style = getTrainingStyle();
     const isHypertrophy = style === "hypertrophy";
@@ -849,8 +841,8 @@
     const body = `
       <p class="modalText">
         ${isHypertrophy
-          ? "After 60 FULL Hypertrophy sessions, this decides whether the next bell begins with Strength, Hypertrophy, or another Hypertrophy block at the current bell."
-          : "After 60 FULL Strength sessions, if yes, stay on this bell and run a 60-FULL-session Hypertrophy cycle."}
+          ? "After 60 Hypertrophy training sessions (FULL or MINI), this decides whether the next bell begins with Strength, Hypertrophy, or another Hypertrophy block at the current bell."
+          : "After 60 Strength training sessions (FULL or MINI), if yes, stay on this bell and run a 60-session Hypertrophy cycle."}
       </p>
       <p class="modalText" style="margin-top:10px;">Current bell step: <b>+${bellLevel}</b></p>
     `;
@@ -1130,7 +1122,7 @@
   }
 
   // -------------------------
-  // Chop Wood & Carry Water - Lesson of the Day (Shuffle Bag)
+  // Way of the Bell - Lesson of the Day (Shuffle Bag)
   // -------------------------
   const LS_LESSON_KEY = "cw_lessons_bag_v2";
 
@@ -1559,10 +1551,15 @@ function computeBand(total){
     updateTrainPill();
   }
 
-  function countCompletedProgressionFullSession(active){
-    if(!active || active.mode !== "FULL") return;
+  function nextProgressionTrainingNumber(mode, practiceMode){
+    if(practiceMode !== "progression") return null;
+    if(!(mode === "FULL" || mode === "MINI")) return null;
+    return (loadProgressCount().n || 0) + 1;
+  }
+
+  function countCompletedProgressionTrainingSession(active){
+    if(!active || !(active.mode === "FULL" || active.mode === "MINI")) return;
     if(active.practiceMode !== "progression") return;
-    if(!["strength","hypertrophy"].includes(active.trainingStyle)) return;
     const pc = loadProgressCount();
     pc.n = (pc.n || 0) + 1;
     saveProgressCount(pc);
@@ -1653,19 +1650,20 @@ function computeBand(total){
       const sessionNumber = (tc.n || 0) + 1;
       const rhythm = applyPracticeRhythm(gateMode, sessionNumber);
       const mode = rhythm.mode;
+      const practiceMode = getPracticeMode();
+      const trainingNumber = nextProgressionTrainingNumber(mode, practiceMode);
 
       // lock gate for today
-      saveDayState({ day: todayKey(), scores, total, modeLocked: mode, rhythmReason: rhythm.reason, sessionNumber });
+      saveDayState({ day: todayKey(), scores, total, modeLocked: mode, rhythmReason: rhythm.reason, sessionNumber, trainingNumber });
 
       // create active state
       if(mode === 'FULL' || mode === 'MINI'){
         const s = generateSession(mode);
           // save memory and count immediately on generation
           saveMemory(s.memNext);
-          const practiceMode = getPracticeMode();
           const trainingStyle = getTrainingStyle();
-        saveActive({ day: todayKey(), mode, phase:'TRAINING', session:s, practiceMode, trainingStyle, sessionNumber, timers:{
-          circuitLeft: getCircuitSeconds(mode, practiceMode, sessionNumber),
+        saveActive({ day: todayKey(), mode, phase:'TRAINING', session:s, practiceMode, trainingStyle, sessionNumber, trainingNumber, timers:{
+          circuitLeft: getCircuitSeconds(mode, practiceMode, trainingNumber),
           carryLeft: mode === 'FULL' ? DUR.carrySec : undefined,
           zone2Left: mode === 'MINI' ? DUR.zone2Sec : undefined,
         }});
@@ -1746,7 +1744,8 @@ function computeBand(total){
     const practiceMode = active.practiceMode || "zen";
     const trainingStyle = active.trainingStyle || "hybrid";
     const sessionNumber = active.sessionNumber || (loadTrainCount().n || 1);
-    const circuitSeconds = getCircuitSeconds(mode, practiceMode, sessionNumber);
+    const trainingNumber = active.trainingNumber || nextProgressionTrainingNumber(mode, practiceMode) || sessionNumber;
+    const circuitSeconds = getCircuitSeconds(mode, practiceMode, trainingNumber);
     const focusPrescription = formatHypertrophyFocusPrescription(trainingStyle);
     const carryImageSrc = session && session.carry ? exerciseImageSrc(session.carry) : null;
 
@@ -2230,7 +2229,7 @@ function computeBand(total){
 
     if(a && typeof a.sessionNumber === 'number'){
       countCompletedPracticeSession(a.sessionNumber);
-      countCompletedProgressionFullSession(a);
+      countCompletedProgressionTrainingSession(a);
     }
 
     // If today's session was not FULL/MINI training, break FULL streak
@@ -2323,14 +2322,15 @@ function computeBand(total){
         // create active based on locked mode
         const mode = day.modeLocked;
         const sessionNumber = day.sessionNumber || ((loadTrainCount().n || 0) + 1);
+        const practiceMode = getPracticeMode();
+        const trainingNumber = day.trainingNumber || nextProgressionTrainingNumber(mode, practiceMode);
         if(mode === 'FULL' || mode === 'MINI'){
           const s = generateSession(mode);
           // save memory and count immediately on generation
           saveMemory(s.memNext);
-          const practiceMode = getPracticeMode();
           const trainingStyle = getTrainingStyle();
-          saveActive({ day: todayKey(), mode, phase:'TRAINING', session:s, practiceMode, trainingStyle, sessionNumber, timers:{
-            circuitLeft: getCircuitSeconds(mode, practiceMode, sessionNumber),
+          saveActive({ day: todayKey(), mode, phase:'TRAINING', session:s, practiceMode, trainingStyle, sessionNumber, trainingNumber, timers:{
+            circuitLeft: getCircuitSeconds(mode, practiceMode, trainingNumber),
             carryLeft: mode === 'FULL' ? DUR.carrySec : undefined,
             zone2Left: mode === 'MINI' ? DUR.zone2Sec : undefined,
           }});

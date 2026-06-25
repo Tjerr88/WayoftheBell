@@ -1,4 +1,4 @@
-CHOP WOOD & CARRY WATER - FLAT GITHUB PAGES PACKAGE
+WAY OF THE BELL - FLAT GITHUB PAGES PACKAGE
 
 All files in this folder belong in the root of your GitHub repository.
 There is no assets folder.
@@ -25,6 +25,7 @@ FILES THAT MUST BE PRESENT
 After GitHub Pages republishes, these URLs should work:
 - https://tjerr88.github.io/Tets/
 - https://tjerr88.github.io/Tets/brand-logo.png
+- https://tjerr88.github.io/Tets/scene-carry.jpg
 - https://tjerr88.github.io/Tets/manifest.json
 
 Android installation:

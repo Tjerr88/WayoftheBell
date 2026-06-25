@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Chop Wood & Carry Water",
-  "short_name": "Chop Wood",
-  "description": "A 60-session strength, mobility and practice companion.",
+  "name": "Way of the Bell",
+  "short_name": "Way Bell",
+  "description": "The practice is the path. A 60-session strength, mobility and practice companion.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
