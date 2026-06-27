@@ -1015,16 +1015,16 @@
       for(let i=0;i<times;i++){
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 1200; // lower freq cuts through noise better
-        gain.gain.setValueAtTime(0.0001, now + i*0.18);
-        gain.gain.exponentialRampToValueAtTime(0.6, now + i*0.18 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + i*0.18 + 0.35);
+        osc.type = 'square';
+        osc.frequency.value = i % 2 === 0 ? 880 : 1320;
+        gain.gain.setValueAtTime(0.0001, now + i*0.28);
+        gain.gain.exponentialRampToValueAtTime(0.85, now + i*0.28 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + i*0.28 + 0.22);
         osc.connect(gain); gain.connect(ctx.destination);
-        osc.start(now + i*0.18); 
-        osc.stop(now + i*0.18 + 0.35);
+        osc.start(now + i*0.28);
+        osc.stop(now + i*0.28 + 0.22);
       }
-      setTimeout(() => ctx.close(), 900);
+      setTimeout(() => ctx.close(), times * 280 + 500);
     }catch{}
   }
 
@@ -1065,7 +1065,7 @@
   // Memory model for generation
   // -------------------------
   function defaultMemory(){
-    const mem = { lastCarry:null, lastEverythingElse:null, patterns:{} };
+    const mem = { lastCarry:null, lastEverythingElse:null, everythingElseBag:[], patterns:{} };
     for(const p of Object.keys(LIB)){
       mem.patterns[p] = { lastSubcat:null, lastExerciseBySubcat:{}, subcatBag:[], exerciseBags:{} };
       for(const sc of Object.keys(LIB[p].subcats)){
@@ -1082,6 +1082,10 @@
     try{
       if(parsed.lastCarry) mem.lastCarry = parsed.lastCarry;
       if(parsed.lastEverythingElse) mem.lastEverythingElse = parsed.lastEverythingElse;
+      if(Array.isArray(parsed.everythingElseBag)){
+        const pool = getEverythingElsePool();
+        mem.everythingElseBag = parsed.everythingElseBag.filter(ex => pool.includes(ex));
+      }
       if(parsed.patterns){
         for(const p of Object.keys(LIB)){
           if(parsed.patterns[p]){
@@ -1284,6 +1288,48 @@
     return picked;
   }
 
+  function refillEverythingElseBag(mem){
+    const pool = getEverythingElsePool();
+    const last = mem.lastEverythingElse;
+    let bag = shuffle(pool);
+
+    if(last && bag.length > 1 && bag[0] === last){
+      const swapIdx = bag.findIndex(ex => ex !== last);
+      if(swapIdx > 0){
+        [bag[0], bag[swapIdx]] = [bag[swapIdx], bag[0]];
+      }
+    }
+
+    mem.everythingElseBag = bag;
+  }
+
+  function pickEverythingElse(mem){
+    const pool = getEverythingElsePool();
+    if(!mem.everythingElseBag || !mem.everythingElseBag.length){
+      refillEverythingElseBag(mem);
+    }
+
+    let bag = mem.everythingElseBag.filter(ex => pool.includes(ex));
+    const last = mem.lastEverythingElse;
+
+    if(!bag.length){
+      refillEverythingElseBag(mem);
+      bag = mem.everythingElseBag;
+    }
+
+    if(last && bag.length > 1 && bag[0] === last){
+      const swapIdx = bag.findIndex(ex => ex !== last);
+      if(swapIdx > 0){
+        [bag[0], bag[swapIdx]] = [bag[swapIdx], bag[0]];
+      }
+    }
+
+    const picked = bag.shift();
+    mem.everythingElseBag = bag;
+    mem.lastEverythingElse = picked;
+    return picked;
+  }
+
   function ladderFor(item, mode){
     const ex = (item.exercise||"").toLowerCase();
     const isDouble = ex.includes("double");
@@ -1347,11 +1393,7 @@
 
     let optional = null;
     if(mode === "FULL"){
-      const pool = getEverythingElsePool();
-      let options = pool.filter(ex => ex !== mem.lastEverythingElse);
-      if(!options.length) options = pool.slice();
-      optional = choice(options);
-      mem.lastEverythingElse = optional;
+      optional = pickEverythingElse(mem);
     }
 
     const circuit = shuffle(picks);
@@ -1468,12 +1510,12 @@
         requestWakeLock();
       }
       t.start(() => {
-        beep(1);
+        beep(4);
         // Auto-chaining:
         if(timerId === 'circuit'){
           const active = loadActive();
           if(active && active.mode === 'MINI' && typeof startZone2 === 'function') startZone2(true);
-          else if(typeof startCarry === 'function') startCarry(true);
+          else if(typeof startCarry === 'function') startCarry(false);
         }
       });
       persistActive();
@@ -2377,6 +2419,10 @@ function computeBand(total){
         <button id="btnStyleHypertrophy" class="btn ${trainingStyle === 'hypertrophy' ? 'primary' : ''}"${trainingStyle === "hypertrophy" ? ' disabled' : ''}>Hypertrophy</button>
         <button id="btnKbOnly" class="btn ${kbOnly ? 'good' : ''}">KB Only: ${kbOnly ? 'On' : 'Off'}</button>
         <button id="btnStartCalibration" class="btn mid">Start Calibration</button>
+        <a class="btn rec"
+           href="https://www.youtube.com/watch?v=7mGYQ1exXYA&pp=ygUhbW9iaWxpdHkgaGFyZHN0eWxlIGtldHRsZWJlbGwgcHJv"
+           target="_blank"
+           rel="noopener noreferrer">Loaded Mobility source</a>
         <button id="btnModeCancel" class="btn">Close</button>
       `
     });
