@@ -468,6 +468,7 @@
   const LS_KB_ONLY_KEY = "cw_kb_only_v1";
   const LS_HYPERTROPHY_QUEUE_KEY = "cw_hypertrophy_queue_v1";
   const LS_BELL_LEVEL_KEY = "cw_bell_level_v1";
+  const LS_ZEN_SECONDS_KEY = "wotb_zen_seconds_v1";
   const LS_LESSON_DAY_KEY = "cw_lesson_day_v2";
   const LS_LESSON_TODAY_KEY = "cw_lesson_today_v2";
 
@@ -586,6 +587,14 @@
   function savePracticeMode(mode){
     localStorage.setItem(LS_PRACTICE_MODE_KEY, mode === "progression" ? "progression" : "zen");
   }
+  function getZenSeconds(){
+    const n = Number(localStorage.getItem(LS_ZEN_SECONDS_KEY));
+    return [20*60, 25*60, 30*60].includes(n) ? n : 20*60;
+  }
+  function saveZenSeconds(seconds){
+    const n = Number(seconds);
+    localStorage.setItem(LS_ZEN_SECONDS_KEY, String([20*60, 25*60, 30*60].includes(n) ? n : 20*60));
+  }
   function getTrainingStyle(){
     const style = localStorage.getItem(LS_TRAINING_STYLE_KEY);
     return ["strength","hybrid","hypertrophy"].includes(style) ? style : "hybrid";
@@ -668,7 +677,7 @@
   }
   function getCircuitSeconds(mode, practiceMode, trainingNumber){
     if(mode === "MINI") return 20*60;
-    if(practiceMode !== "progression") return 20*60;
+    if(practiceMode !== "progression") return getZenSeconds();
     const n = Math.max(1, Number(trainingNumber) || 1);
     if(n <= 20) return 20*60;
     if(n <= 40) return 25*60;
@@ -2430,60 +2439,124 @@ function computeBand(total){
     boot();
   }
 
+  function confirmActiveRecovery(){
+    openModal({
+      title: "Force Active Recovery?",
+      text: "This will replace today's current gate/session with Loaded Kettlebell Mobility.",
+      actionsHTML: `
+        <button id="btnConfirmRecovery" class="btn rec">Start Active Recovery</button>
+        <button id="btnCancelRecovery" class="btn">Cancel</button>
+      `
+    });
+
+    document.getElementById("btnConfirmRecovery").addEventListener("click", () => {
+      forceActiveRecovery();
+    });
+    document.getElementById("btnCancelRecovery").addEventListener("click", () => {
+      openPracticeModeSelector();
+    });
+  }
+
   function openPracticeModeSelector(){
     const current = getPracticeMode();
     const kbOnly = getKettlebellOnly();
     const trainingStyle = getTrainingStyle();
+    const zenSeconds = getZenSeconds();
+    const isZen = current === "zen";
     openModal({
       title: "Session settings",
-      text: "Choose timer progression and training style. In Progression, Strength and Hypertrophy alternate after 60-session Military Press checks; Hybrid only changes training time.",
+      text: isZen
+        ? "Zen uses the normal training structure with your chosen style and a fixed session time."
+        : "Progression uses the normal training structure, timed blocks, and 60-session Military Press checks for Strength and Hypertrophy.",
       actionsHTML: `
-        <button id="btnModeZen" class="btn primary"${current === "zen" ? ' disabled' : ''}>Zen</button>
-        <button id="btnModeProgression" class="btn good"${current === "progression" ? ' disabled' : ''}>Progression</button>
-        <button id="btnStyleStrength" class="btn ${trainingStyle === 'strength' ? 'primary' : ''}"${trainingStyle === "strength" ? ' disabled' : ''}>Strength</button>
-        <button id="btnStyleHybrid" class="btn ${trainingStyle === 'hybrid' ? 'primary' : ''}"${trainingStyle === "hybrid" ? ' disabled' : ''}>Hybrid</button>
-        <button id="btnStyleHypertrophy" class="btn ${trainingStyle === 'hypertrophy' ? 'primary' : ''}"${trainingStyle === "hypertrophy" ? ' disabled' : ''}>Hypertrophy</button>
-        <button id="btnKbOnly" class="btn ${kbOnly ? 'good' : ''}">KB Only: ${kbOnly ? 'On' : 'Off'}</button>
-        <button id="btnStartCalibration" class="btn mid">Start Calibration</button>
-        <button id="btnForceRecovery" class="btn rec">Active Recovery</button>
-        <button id="btnModeCancel" class="btn">Close</button>
+        <div style="display:grid; gap:12px; width:100%;">
+          <div>
+            <div class="small" style="margin-bottom:6px;">Mode</div>
+            <div class="row">
+              <button id="btnModeZen" class="btn ${current === 'zen' ? 'primary' : ''}"${current === "zen" ? ' disabled' : ''}>Zen</button>
+              <button id="btnModeProgression" class="btn ${current === 'progression' ? 'good' : ''}"${current === "progression" ? ' disabled' : ''}>Progression</button>
+            </div>
+          </div>
+
+          ${isZen ? `
+            <div>
+              <div class="small" style="margin-bottom:6px;">Zen session time</div>
+              <div class="row">
+                <button id="btnZen20" class="btn ${zenSeconds === 20*60 ? 'primary' : ''}"${zenSeconds === 20*60 ? ' disabled' : ''}>20 min</button>
+                <button id="btnZen25" class="btn ${zenSeconds === 25*60 ? 'primary' : ''}"${zenSeconds === 25*60 ? ' disabled' : ''}>25 min</button>
+                <button id="btnZen30" class="btn ${zenSeconds === 30*60 ? 'primary' : ''}"${zenSeconds === 30*60 ? ' disabled' : ''}>30 min</button>
+              </div>
+            </div>
+          ` : ``}
+
+          <div>
+            <div class="small" style="margin-bottom:6px;">Training style</div>
+            <div class="row">
+              <button id="btnStyleStrength" class="btn ${trainingStyle === 'strength' ? 'primary' : ''}"${trainingStyle === "strength" ? ' disabled' : ''}>Strength</button>
+              <button id="btnStyleHybrid" class="btn ${trainingStyle === 'hybrid' ? 'primary' : ''}"${trainingStyle === "hybrid" ? ' disabled' : ''}>Hybrid</button>
+              <button id="btnStyleHypertrophy" class="btn ${trainingStyle === 'hypertrophy' ? 'primary' : ''}"${trainingStyle === "hypertrophy" ? ' disabled' : ''}>Hypertrophy</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="small" style="margin-bottom:6px;">Tools</div>
+            <div class="row">
+              <button id="btnStartCalibration" class="btn mid">Start Calibration</button>
+              <button id="btnKbOnly" class="btn ${kbOnly ? 'good' : ''}">KB Only: ${kbOnly ? 'On' : 'Off'}</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="small" style="margin-bottom:6px;">Override today</div>
+            <div class="row">
+              <button id="btnForceRecovery" class="btn rec">Force Active Recovery</button>
+              <button id="btnModeCancel" class="btn">Close</button>
+            </div>
+          </div>
+        </div>
       `
     });
 
     document.getElementById("btnModeZen").addEventListener("click", () => {
       savePracticeMode("zen");
-      closeModal();
-      boot();
+      openPracticeModeSelector();
     });
 
     document.getElementById("btnModeProgression").addEventListener("click", () => {
       savePracticeMode("progression");
-      closeModal();
-      boot();
+      openPracticeModeSelector();
     });
+
+    const bindZenTime = (id, seconds) => {
+      const btn = document.getElementById(id);
+      if(!btn) return;
+      btn.addEventListener("click", () => {
+        saveZenSeconds(seconds);
+        openPracticeModeSelector();
+      });
+    };
+    bindZenTime("btnZen20", 20*60);
+    bindZenTime("btnZen25", 25*60);
+    bindZenTime("btnZen30", 30*60);
 
     document.getElementById("btnStyleStrength").addEventListener("click", () => {
       saveTrainingStyle("strength");
-      closeModal();
-      boot();
+      openPracticeModeSelector();
     });
 
     document.getElementById("btnStyleHybrid").addEventListener("click", () => {
       saveTrainingStyle("hybrid");
-      closeModal();
-      boot();
+      openPracticeModeSelector();
     });
 
     document.getElementById("btnStyleHypertrophy").addEventListener("click", () => {
       saveTrainingStyle("hypertrophy");
-      closeModal();
-      boot();
+      openPracticeModeSelector();
     });
 
     document.getElementById("btnKbOnly").addEventListener("click", () => {
       saveKettlebellOnly(!getKettlebellOnly());
-      closeModal();
-      boot();
+      openPracticeModeSelector();
     });
 
     document.getElementById("btnStartCalibration").addEventListener("click", () => {
@@ -2491,7 +2564,7 @@ function computeBand(total){
     });
 
     document.getElementById("btnForceRecovery").addEventListener("click", () => {
-      forceActiveRecovery();
+      confirmActiveRecovery();
     });
 
     document.getElementById("btnModeCancel").addEventListener("click", () => closeModal());
@@ -2544,6 +2617,7 @@ function computeBand(total){
       localStorage.removeItem(LS_KB_ONLY_KEY);
       localStorage.removeItem(LS_HYPERTROPHY_QUEUE_KEY);
       localStorage.removeItem(LS_BELL_LEVEL_KEY);
+      localStorage.removeItem(LS_ZEN_SECONDS_KEY);
       localStorage.removeItem("dtt_pull_mode_v1");
       Object.values(timers).forEach(t => { try{ t && t.pause && t.pause(); }catch{} });
       releaseWakeLock();
