@@ -130,6 +130,13 @@
       border-color: rgba(247,239,224,0.36);
       background: rgba(17,25,19,0.38);
     }
+    .hero-actions #btnInstall{
+      display:none;
+      color:#f2dec0;
+      border-color: rgba(247,239,224,0.36);
+      background: rgba(17,25,19,0.38);
+    }
+    .hero-actions #btnInstall.show{ display:inline-flex; }
     .hero-actions #trainPill{
       color:#f2dec0;
       border-color: rgba(247,239,224,0.30);
@@ -444,6 +451,7 @@
     </div>
     <div class="hero-actions">
       <button id="btnMain" class="btn main-action">Options</button>
+      <button id="btnInstall" class="btn" type="button">Install</button>
       <button id="btnReset" class="btn" title="Clears selection memory and today's active status.">Reset</button>
       <span id="trainPill" class="pill">Practice: <strong>0</strong></span>
     </div>
@@ -534,6 +542,7 @@
   const leftCard = document.getElementById("leftCard");
   const rightInner = document.getElementById("rightInner");
   const btnMain = document.getElementById("btnMain");
+  const btnInstall = document.getElementById("btnInstall");
   const btnReset = document.getElementById("btnReset");
   const wakeStatus = document.getElementById("wakeStatus");
   const modePill = document.getElementById("modePill");
@@ -837,6 +846,60 @@
     appModal.addEventListener("click", (e) => { if(e.target === appModal) closeModal(); });
   }
 
+  // --- Install prompt
+  let deferredInstallPrompt = null;
+
+  function isStandaloneApp(){
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  }
+
+  function isIosLike(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function setInstallButtonVisible(show){
+    if(!btnInstall) return;
+    btnInstall.classList.toggle("show", !!show && !isStandaloneApp());
+  }
+
+  function setupInstallPrompt(){
+    if(!btnInstall) return;
+    setInstallButtonVisible(isIosLike());
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      setInstallButtonVisible(true);
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      setInstallButtonVisible(false);
+    });
+
+    btnInstall.addEventListener("click", async () => {
+      if(isStandaloneApp()){
+        setInstallButtonVisible(false);
+        return;
+      }
+
+      if(deferredInstallPrompt){
+        deferredInstallPrompt.prompt();
+        try{ await deferredInstallPrompt.userChoice; }catch{}
+        deferredInstallPrompt = null;
+        setInstallButtonVisible(false);
+        return;
+      }
+
+      openModal({
+        title: "Install Way of the Bell",
+        text: "Op iPhone/iPad: tik op Deel en kies daarna Zet op beginscherm.",
+        actionsHTML: `<button id="btnInstallClose" class="btn primary">OK</button>`
+      });
+      document.getElementById("btnInstallClose").addEventListener("click", closeModal);
+    });
+  }
+
   // --- Checkpoint: progression cycle check (after 60 completed FULL/MINI sessions)
   function showCheckpointModal(){
     const style = getTrainingStyle();
@@ -1048,25 +1111,39 @@
       left: totalSeconds,
       running: false,
       _t: null,
+      _endAt: null,
       _persistTick: onTick,
+      _notify(){
+        const f = this._onTick || onTick;
+        f && f(this.left, this.total);
+      },
+      sync(){
+        if(this.running && this._endAt){
+          this.left = Math.max(0, Math.ceil((this._endAt - Date.now()) / 1000));
+        }
+        this._notify();
+      },
       start(onDone){
         if(this.running) return;
         this.running = true;
+        this._endAt = Date.now() + (Math.max(0, this.left) * 1000);
         const tick = () => {
           if(!this.running) return;
-          const f = this._onTick || onTick; f && f(this.left, this.total);
+          this.left = Math.max(0, Math.ceil((this._endAt - Date.now()) / 1000));
+          this._notify();
           if(this.left <= 0){
             this.running=false; this._t=null;
             try{ onDone && onDone(); }catch{}
             return;
           }
-          this._t = setTimeout(() => { this.left -= 1; tick(); }, 1000);
+          const nextDelay = Math.max(250, Math.min(1000, this._endAt - Date.now() - ((this.left - 1) * 1000)));
+          this._t = setTimeout(tick, nextDelay);
         };
         tick();
       },
-      pause(){ this.running=false; if(this._t) clearTimeout(this._t); this._t=null; },
-      reset(){ this.pause(); this.left=this.total; { const f = this._onTick || onTick; f && f(this.left,this.total); } },
-      setTotal(totalSeconds){ this.pause(); this.total=totalSeconds; this.left=totalSeconds; { const f = this._onTick || onTick; f && f(this.left,this.total); } },
+      pause(){ this.sync(); this.running=false; this._endAt=null; if(this._t) clearTimeout(this._t); this._t=null; },
+      reset(){ this.pause(); this.left=this.total; this._notify(); },
+      setTotal(totalSeconds){ this.pause(); this.total=totalSeconds; this.left=totalSeconds; this._notify(); },
     };
   }
 
@@ -2149,18 +2226,48 @@ function computeBand(total){
 
     // Initialize from active
     const total = active.timers.breathTotal ?? (active.timers.breathTotal = (active.timers.breathLeft ?? 300));
+    const breathCycleSec = breathSeq.reduce((sum, p) => sum + p.sec, 0);
+    let lastBreathPhase = active.timers.breathPhase || 'IN';
+
+    function syncBreathPhase(a, allowBeep=false){
+      a.timers = a.timers || {};
+      const left = Math.max(0, a.timers.breathLeft ?? total);
+      const elapsed = Math.max(0, total - left);
+      let cyclePos = breathCycleSec ? elapsed % breathCycleSec : 0;
+      let phase = breathSeq[0];
+      for(const candidate of breathSeq){
+        if(cyclePos < candidate.sec){
+          phase = candidate;
+          break;
+        }
+        cyclePos -= candidate.sec;
+      }
+
+      const nextLeft = Math.max(1, phase.sec - Math.floor(cyclePos));
+      const changed = a.timers.breathPhase && a.timers.breathPhase !== phase.phase;
+      a.timers.breathPhase = phase.phase;
+      a.timers.breathPhaseLeft = nextLeft;
+      a.timers.breathPhaseSec = phase.sec;
+
+      if(allowBeep && changed && lastBreathPhase !== phase.phase){
+        beep(1);
+      }
+      lastBreathPhase = phase.phase;
+      return phase;
+    }
 
     function updateUI(){
       const a = loadActive();
       if(!a) return;
+      const phase = syncBreathPhase(a, false);
+      saveActive(a);
       const left = a.timers.breathLeft;
       const pct = total ? (1 - left/total) * 100 : 0;
       prog.style.width = `${Math.max(0, Math.min(100, pct))}%`;
       totalLeft.textContent = `${fmt(left)} left`;
       phaseTxt.textContent = a.timers.breathPhase;
       phaseSub.textContent = `${a.timers.breathPhaseLeft}s`;
-      const p = breathSeq.find(x => x.phase === a.timers.breathPhase && ((x.phase==='IN'||x.phase==='OUT') ? true : true)) || breathSeq[0];
-      ringInner.style.transform = `scale(${p.scale})`;
+      ringInner.style.transform = `scale(${phase.scale})`;
     }
 
     // Breathing timer is custom (phase-based)
@@ -2170,44 +2277,17 @@ function computeBand(total){
       const a = loadActive();
       if(!a) return;
       a.timers.breathLeft = left;
+      syncBreathPhase(a, timers.breathing && timers.breathing.running);
       saveActive(a);
       updateUI();
     });
     timers.breathing.left = Math.max(0, active.timers.breathLeft ?? 300);
 
-    // phase tick
-    let phaseTicker = null;
-    function stopPhaseTicker(){ if(phaseTicker) clearInterval(phaseTicker); phaseTicker=null; }
-
-    function startPhaseTicker(){
-      stopPhaseTicker();
-      phaseTicker = setInterval(() => {
-        const a = loadActive();
-        if(!a) return;
-        if(!timers.breathing.running) return;
-        a.timers.breathPhaseLeft = Math.max(0, (a.timers.breathPhaseLeft ?? 0) - 1);
-        if(a.timers.breathPhaseLeft <= 0){
-          // move to next phase
-          const idx = breathSeq.findIndex(x => x.phase === a.timers.breathPhase && x.sec === (a.timers.breathPhaseSec || x.sec));
-          const next = breathSeq[(idx+1) % breathSeq.length];
-          a.timers.breathPhase = next.phase;
-          a.timers.breathPhaseLeft = next.sec;
-          a.timers.breathPhaseSec = next.sec;
-          saveActive(a);
-          // optional: beep at phase change (kept on)
-          beep(1);
-        } else {
-          saveActive(a);
-        }
-        updateUI();
-      }, 1000);
-    }
-
     // Right panel for breathing uses timers.breathing (start/pause/reset), but with wakelock
     renderRightTimer('Breathing', 'breathing');
     setModePill('-');
 
-    // Patch the right panel buttons to also control phaseTicker + wakelock
+    // Patch the right panel buttons to also control wakelock
     const startBtn = rightInner.querySelector('#btnStart');
     const pauseBtn = rightInner.querySelector('#btnPause');
     const resetBtn = rightInner.querySelector('#btnResetT');
@@ -2218,20 +2298,18 @@ function computeBand(total){
       if(!a) return;
       // if no phase init
       if(!a.timers.breathPhase){ a.timers.breathPhase = 'IN'; a.timers.breathPhaseLeft = 3; }
+      syncBreathPhase(a, false);
       saveActive(a);
-      startPhaseTicker();
     }, { once:false });
 
     pauseBtn.addEventListener('click', () => {
-      // pause already handled by renderRightTimer; also stop ticker
-      stopPhaseTicker();
+      // pause already handled by renderRightTimer
       releaseWakeLock();
     }, { once:false });
 
     resetBtn.addEventListener('click', () => {
       const a = loadActive();
       if(!a) return;
-      stopPhaseTicker();
       a.timers.breathLeft = a.timers.breathTotal ?? (a.timers.breathTotal = (a.timers.breathLeft ?? 300));
       a.timers.breathPhase = 'IN';
       a.timers.breathPhaseLeft = 3;
@@ -2253,14 +2331,12 @@ function computeBand(total){
     updateUI();
 
     document.getElementById('btnBack').addEventListener('click', () => {
-      stopPhaseTicker();
       releaseWakeLock();
       const a = loadActive();
       if(a){ a.phase = 'MOBILITY'; saveActive(a); }
       boot();
     });
     document.getElementById('btnFinish').addEventListener('click', () => {
-      stopPhaseTicker();
       releaseWakeLock();
       completeSession();
     });
@@ -2626,15 +2702,28 @@ function computeBand(total){
     });
   });
 
-  // Visibility: re-request wakelock only if a wakelock-eligible timer is running
+  function syncRunningTimers(){
+    Object.values(timers).forEach(t => {
+      try{ if(t && t.running && typeof t.sync === "function") t.sync(); }catch{}
+    });
+  }
+
+  // Visibility: sync timers and re-request wakelock only if a wakelock-eligible timer is running
   document.addEventListener('visibilitychange', () => {
     if(document.visibilityState !== 'visible') return;
+    syncRunningTimers();
     // Only if circuit/carry/breathing running
     const eligibleRunning = (timers.circuit && timers.circuit.running) || (timers.carry && timers.carry.running) || (timers.breathing && timers.breathing.running);
     if(eligibleRunning) requestWakeLock();
   });
 
+  window.addEventListener("pageshow", () => {
+    syncRunningTimers();
+    setInstallButtonVisible(deferredInstallPrompt || isIosLike());
+  });
+
   // First boot
+  setupInstallPrompt();
   setWakeStatus(false);
   renderRightNone();
     // If you hit 60 training sessions, show the bell-up checkpoint once.
