@@ -424,6 +424,75 @@
     }
     .modalItem label{ display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
     .modalItem input{ transform: translateY(2px); }
+    .availabilityList{
+      display:grid;
+      gap:10px;
+      max-height:min(62vh, 620px);
+      overflow:auto;
+      padding-right:2px;
+    }
+    .availabilityGroup{
+      border:1px solid var(--line);
+      border-radius:8px;
+      background: rgba(255,250,239,0.48);
+      overflow:hidden;
+    }
+    .availabilityGroup summary{
+      cursor:pointer;
+      user-select:none;
+      padding:10px 12px;
+      font-size:13px;
+      font-weight:900;
+      color:var(--text);
+    }
+    .availabilitySub{
+      padding:0 12px 12px;
+      display:grid;
+      gap:8px;
+    }
+    .availabilitySubTitle{
+      margin-top:6px;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:850;
+      text-transform:uppercase;
+      letter-spacing:.05em;
+    }
+    .availabilityRow{
+      display:grid;
+      grid-template-columns: minmax(160px, 1fr) minmax(150px, 1fr);
+      gap:8px;
+      align-items:center;
+      padding:8px;
+      border:1px solid rgba(32,40,34,0.10);
+      border-radius:8px;
+      background: rgba(255,250,239,0.56);
+    }
+    .availabilityRow.off{ opacity:.62; }
+    .availabilityToggle{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:13px;
+      font-weight:760;
+      color:var(--text);
+      min-width:0;
+    }
+    .availabilityToggle input{ flex:0 0 auto; }
+    .availabilityReplacement{
+      width:100%;
+      min-width:0;
+      border:1px solid rgba(32,40,34,0.16);
+      border-radius:8px;
+      background:rgba(255,250,239,0.72);
+      color:var(--text);
+      padding:9px 10px;
+      font:inherit;
+      font-size:13px;
+    }
+    @media (max-width: 620px){
+      .availabilityRow{ grid-template-columns:1fr; }
+    }
 
 </style>
 </head>
@@ -479,6 +548,7 @@
   const LS_ZEN_SECONDS_KEY = "wotb_zen_seconds_v1";
   const LS_LESSON_DAY_KEY = "cw_lesson_day_v2";
   const LS_LESSON_TODAY_KEY = "cw_lesson_today_v2";
+  const LS_EXERCISE_SETTINGS_KEY = "wotb_exercise_settings_v1";
 
   const DUR = { carrySec: 5*60, zone2Sec: 20*60, mobilitySec: 25*60 };
 
@@ -674,6 +744,52 @@
     const slug = exerciseSlug(name);
     return EXERCISE_IMAGE_SLUGS.has(slug) ? `ex-${slug}.webp` : null;
   }
+  function escapeHTML(value){
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+  function loadExerciseSettings(){
+    const parsed = loadJSON(LS_EXERCISE_SETTINGS_KEY) || {};
+    return {
+      disabled: parsed.disabled && typeof parsed.disabled === "object" ? parsed.disabled : {},
+      replacements: parsed.replacements && typeof parsed.replacements === "object" ? parsed.replacements : {}
+    };
+  }
+  function saveExerciseSettings(settings){
+    saveJSON(LS_EXERCISE_SETTINGS_KEY, {
+      disabled: settings.disabled || {},
+      replacements: settings.replacements || {}
+    });
+  }
+  function isExerciseAvailable(name, settings = loadExerciseSettings()){
+    return settings.disabled?.[name] !== true;
+  }
+  function customExerciseName(name, settings = loadExerciseSettings()){
+    const value = String(settings.replacements?.[name] || "").trim();
+    return value ? value.slice(0, 80) : name;
+  }
+  function availableFrom(list, settings = loadExerciseSettings()){
+    return list.filter(name => isExerciseAvailable(name, settings));
+  }
+  function exerciseAvailabilityGroups(){
+    const groups = [];
+    for(const patternKey of Object.keys(LIB)){
+      groups.push({
+        label: LIB[patternKey].label,
+        subgroups: Object.keys(LIB[patternKey].subcats).map(subcatKey => ({
+          label: LIB[patternKey].subcats[subcatKey].label,
+          exercises: LIB[patternKey].subcats[subcatKey].exercises.slice()
+        }))
+      });
+    }
+    groups.push({ label:"Carry", subgroups:[{ label:"Loaded Carry", exercises:CARRIES.slice() }] });
+    groups.push({ label:"Everything Else", subgroups:[{ label:"Accessories", exercises:EVERYTHING_ELSE_NORMAL.slice() }] });
+    return groups;
+  }
   function openExercisePreview(name, src){
     if(!src) return;
     openModal({
@@ -693,7 +809,7 @@
     return 30*60;
   }
   function isBallisticItem(item){
-    return !!item && (item.subcatKey === "ballistic" || isBallisticExtraExercise(item.exercise));
+    return !!item && (item.subcatKey === "ballistic" || isBallisticExtraExercise(item.baseExercise || item.exercise));
   }
   function formatPrescription(item, trainingStyle){
     const ballistic = isBallisticItem(item);
@@ -1271,7 +1387,11 @@
     return lesson;
   }
   function refillSubcategoryBag(patternKey, mem){
-    const subcats = Object.keys(LIB[patternKey].subcats);
+    const settings = loadExerciseSettings();
+    const subcats = Object.keys(LIB[patternKey].subcats).filter(sc => availableFrom(LIB[patternKey].subcats[sc].exercises, settings).length);
+    if(!subcats.length){
+      subcats.push(...Object.keys(LIB[patternKey].subcats));
+    }
     const last = mem.patterns[patternKey].lastSubcat;
     let bag = shuffle(subcats);
 
@@ -1287,12 +1407,14 @@
 
   function pickSubcategory(patternKey, mem){
     const patternMem = mem.patterns[patternKey];
-    const subcats = Object.keys(LIB[patternKey].subcats);
+    const settings = loadExerciseSettings();
+    let subcats = Object.keys(LIB[patternKey].subcats).filter(sc => availableFrom(LIB[patternKey].subcats[sc].exercises, settings).length);
+    if(!subcats.length) subcats = Object.keys(LIB[patternKey].subcats);
     if(!patternMem.subcatBag || !patternMem.subcatBag.length){
       refillSubcategoryBag(patternKey, mem);
     }
 
-    let bag = patternMem.subcatBag;
+    let bag = patternMem.subcatBag.filter(sc => subcats.includes(sc));
     const last = patternMem.lastSubcat;
 
     if(!bag.length){
@@ -1323,7 +1445,11 @@
   }
 
   function refillExerciseBag(patternKey, subcatKey, mem){
-    const exList = LIB[patternKey].subcats[subcatKey].exercises.slice();
+    const settings = loadExerciseSettings();
+    let exList = availableFrom(LIB[patternKey].subcats[subcatKey].exercises, settings);
+    if(!exList.length){
+      exList = LIB[patternKey].subcats[subcatKey].exercises.slice();
+    }
     const lastEx = mem.patterns[patternKey].lastExerciseBySubcat[subcatKey];
     let bag = shuffle(exList);
 
@@ -1339,12 +1465,16 @@
 
   function pickExercise(patternKey, subcatKey, mem){
     const patternMem = mem.patterns[patternKey];
-    const exList = LIB[patternKey].subcats[subcatKey].exercises;
+    const settings = loadExerciseSettings();
+    let exList = availableFrom(LIB[patternKey].subcats[subcatKey].exercises, settings);
+    if(!exList.length){
+      exList = LIB[patternKey].subcats[subcatKey].exercises.slice();
+    }
     if(!patternMem.exerciseBags[subcatKey] || !patternMem.exerciseBags[subcatKey].length){
       refillExerciseBag(patternKey, subcatKey, mem);
     }
 
-    let bag = patternMem.exerciseBags[subcatKey];
+    let bag = patternMem.exerciseBags[subcatKey].filter(ex => exList.includes(ex));
     const lastEx = patternMem.lastExerciseBySubcat[subcatKey];
 
     if(!bag.length){
@@ -1375,7 +1505,9 @@
   }
 
   function refillEverythingElseBag(mem){
-    const pool = getEverythingElsePool();
+    const settings = loadExerciseSettings();
+    const available = availableFrom(getEverythingElsePool(), settings);
+    const pool = available.length ? available : getEverythingElsePool();
     const last = mem.lastEverythingElse;
     let bag = shuffle(pool);
 
@@ -1390,7 +1522,9 @@
   }
 
   function pickEverythingElse(mem){
-    const pool = getEverythingElsePool();
+    const settings = loadExerciseSettings();
+    const available = availableFrom(getEverythingElsePool(), settings);
+    const pool = available.length ? available : getEverythingElsePool();
     if(!mem.everythingElseBag || !mem.everythingElseBag.length){
       refillEverythingElseBag(mem);
     }
@@ -1417,7 +1551,7 @@
   }
 
   function ladderFor(item, mode){
-    const ex = (item.exercise||"").toLowerCase();
+    const ex = (item.baseExercise || item.exercise || "").toLowerCase();
     const isDouble = ex.includes("double");
     const isBallistic = (item.subcatKey === "ballistic");
 
@@ -1443,6 +1577,7 @@
 
   function generateSession(mode = "MINI"){
     const mem = loadMemory();
+    const exerciseSettings = loadExerciseSettings();
     const picks = [];
     const hypoState = loadHypertrophyState();
     const hypertrophyPattern = hypoState.current;
@@ -1450,12 +1585,14 @@
     for(const patternKey of ["squat","hinge","push","pull"]){
       const subcatKey = pickSubcategory(patternKey, mem);
       const rawEx = pickExercise(patternKey, subcatKey, mem);
-      const ex = patternKey === "pull" ? applyKettlebellOnlyReplacement(subcatKey, rawEx) : rawEx;
+      const baseEx = patternKey === "pull" ? applyKettlebellOnlyReplacement(subcatKey, rawEx) : rawEx;
+      const ex = customExerciseName(baseEx, exerciseSettings);
       picks.push({
         patternKey,
         patternLabel: LIB[patternKey].label,
         subcatKey,
         subcatLabel: LIB[patternKey].subcats[subcatKey].label,
+        baseExercise: baseEx,
         exercise: ex
       });
       mem.patterns[patternKey].lastSubcat = subcatKey;
@@ -1465,7 +1602,7 @@
     if(getTrainingStyle() === "hybrid"){
       for(const item of picks){
         if(item.patternKey !== hypertrophyPattern) continue;
-        if(!isBallistic(item.subcatKey) && !isBallisticExtraExercise(item.exercise)){
+        if(!isBallistic(item.subcatKey) && !isBallisticExtraExercise(item.baseExercise || item.exercise)){
           item.hypertrophy = true;
           hypertrophyApplied = true;
         }
@@ -1478,15 +1615,20 @@
     }
 
     let optional = null;
+    let optionalBase = null;
     if(mode === "FULL"){
-      optional = pickEverythingElse(mem);
+      optionalBase = pickEverythingElse(mem);
+      optional = customExerciseName(optionalBase, exerciseSettings);
     }
 
     const circuit = shuffle(picks);
-    const carryAllowed = CARRIES.filter(c => c !== mem.lastCarry);
-    const carry = choice(carryAllowed.length ? carryAllowed : CARRIES);
-    mem.lastCarry = carry;
-    return { circuit, carry, optional, memNext: mem };
+    const availableCarries = availableFrom(CARRIES, exerciseSettings);
+    const carryPool = availableCarries.length ? availableCarries : CARRIES;
+    const carryAllowed = carryPool.filter(c => c !== mem.lastCarry);
+    const carryBase = choice(carryAllowed.length ? carryAllowed : carryPool);
+    const carry = customExerciseName(carryBase, exerciseSettings);
+    mem.lastCarry = carryBase;
+    return { circuit, carry, carryBase, optional, optionalBase, memNext: mem };
   }
 
   // -------------------------
@@ -1876,7 +2018,7 @@ function computeBand(total){
     const trainingNumber = active.trainingNumber || nextProgressionTrainingNumber(mode, practiceMode) || sessionNumber;
     const circuitSeconds = getCircuitSeconds(mode, practiceMode, trainingNumber);
     const focusPrescription = formatHypertrophyFocusPrescription(trainingStyle);
-    const carryImageSrc = session && session.carry ? exerciseImageSrc(session.carry) : null;
+    const carryImageSrc = session && session.carry ? exerciseImageSrc(session.carryBase || session.carry) : null;
 
     leftCard.innerHTML = `
       <h2>Today</h2>
@@ -1915,8 +2057,8 @@ function computeBand(total){
       <h3 class="sectionTitle">Optional</h3>
       <div class="exercise optionalCard">
         <div class="ex-left">
-          <div class="ex-title">${session.optional}</div>
-          <div class="ex-meta">${formatExtraPrescription(session.optional)}</div>
+          <div class="ex-title">${escapeHTML(session.optional)}</div>
+          <div class="ex-meta">${formatExtraPrescription(session.optionalBase || session.optional)}</div>
         </div>
         <div class="pill">Optional</div>
       </div>` : ``}
@@ -1935,11 +2077,11 @@ function computeBand(total){
       <h3 class="sectionTitle">Loaded Carry</h3>
       <div class="exercise carryCard" style="align-items:center;">
         <div class="ex-left">
-          <div class="ex-title">${session.carry}</div>
+          <div class="ex-title">${escapeHTML(session.carry)}</div>
           <div class="ex-meta">05:00 easy - switch sides when needed</div>
         </div>
         <div class="exercise-media">
-          ${carryImageSrc ? `<button class="exercise-thumb-btn" type="button" data-ex-img="${carryImageSrc}" data-ex-name="${session.carry}" aria-label="Show ${session.carry} image"><img class="exercise-thumb" src="${carryImageSrc}" alt="${session.carry} visual reminder" loading="lazy"></button>` : ``}
+          ${carryImageSrc ? `<button class="exercise-thumb-btn" type="button" data-ex-img="${carryImageSrc}" data-ex-name="${escapeHTML(session.carry)}" aria-label="Show ${escapeHTML(session.carry)} image"><img class="exercise-thumb" src="${carryImageSrc}" alt="${escapeHTML(session.carry)} visual reminder" loading="lazy"></button>` : ``}
           <div class="pill">5 min</div>
         </div>
       </div>`}
@@ -1958,20 +2100,20 @@ function computeBand(total){
     session.circuit.forEach((item) => {
       const div = document.createElement('div');
       div.className = 'exercise';
-      const imageSrc = exerciseImageSrc(item.exercise);
+      const imageSrc = exerciseImageSrc(item.baseExercise || item.exercise);
       const basePrescription = item.hypertrophy ? focusPrescription : formatPrescription(item, trainingStyle);
       const prescription = mode === 'MINI' ? `1 set - ${basePrescription}` : basePrescription;
       div.innerHTML = `
         <div class="ex-left">
-          <div class="ex-title">${item.exercise}</div>
+          <div class="ex-title">${escapeHTML(item.exercise)}</div>
           <div class="ex-meta">${item.patternLabel} • ${item.subcatLabel} • <b>${item.hypertrophy 
       ? prescription
       : prescription
     }</b></div>
         </div>
         <div class="exercise-media">
-          ${imageSrc ? `<button class="exercise-thumb-btn" type="button" data-ex-img="${imageSrc}" data-ex-name="${item.exercise}" aria-label="Show ${item.exercise} image"><img class="exercise-thumb" src="${imageSrc}" alt="${item.exercise} end position" loading="lazy"></button>` : ``}
-          <div class="pill">${item.patternLabel}</div>
+          ${imageSrc ? `<button class="exercise-thumb-btn" type="button" data-ex-img="${imageSrc}" data-ex-name="${escapeHTML(item.exercise)}" aria-label="Show ${escapeHTML(item.exercise)} image"><img class="exercise-thumb" src="${imageSrc}" alt="${escapeHTML(item.exercise)} end position" loading="lazy"></button>` : ``}
+          <div class="pill">${escapeHTML(item.patternLabel)}</div>
         </div>
       `;
       list.appendChild(div);
@@ -2533,6 +2675,75 @@ function computeBand(total){
     });
   }
 
+  function openExerciseAvailability(){
+    const settings = loadExerciseSettings();
+    const groupsHTML = exerciseAvailabilityGroups().map(group => `
+      <details class="availabilityGroup" open>
+        <summary>${escapeHTML(group.label)}</summary>
+        <div class="availabilitySub">
+          ${group.subgroups.map(sub => `
+            <div class="availabilitySubTitle">${escapeHTML(sub.label)}</div>
+            ${sub.exercises.map(ex => {
+              const available = isExerciseAvailable(ex, settings);
+              const replacement = settings.replacements?.[ex] || "";
+              return `
+                <div class="availabilityRow ${available ? "" : "off"}" data-row="${escapeHTML(ex)}">
+                  <label class="availabilityToggle">
+                    <input type="checkbox" data-availability="${escapeHTML(ex)}"${available ? " checked" : ""}>
+                    <span>${escapeHTML(ex)}</span>
+                  </label>
+                  <input class="availabilityReplacement" type="text" data-replacement="${escapeHTML(ex)}" value="${escapeHTML(replacement)}" placeholder="Optional variation">
+                </div>
+              `;
+            }).join("")}
+          `).join("")}
+        </div>
+      </details>
+    `).join("");
+
+    openModal({
+      title: "Exercise availability",
+      text: "Turn exercises on or off, or give them your own variation name inside the same category.",
+      bodyHTML: `<div id="exerciseAvailabilityList" class="availabilityList">${groupsHTML}</div>`,
+      actionsHTML: `
+        <button id="btnAvailabilityReset" class="btn danger">Reset all</button>
+        <button id="btnAvailabilityBack" class="btn primary">Back</button>
+      `
+    });
+
+    const list = document.getElementById("exerciseAvailabilityList");
+    list.addEventListener("change", (event) => {
+      const toggle = event.target.closest("[data-availability]");
+      if(!toggle) return;
+      const name = toggle.getAttribute("data-availability");
+      const next = loadExerciseSettings();
+      if(toggle.checked) delete next.disabled[name];
+      else next.disabled[name] = true;
+      saveExerciseSettings(next);
+      const row = toggle.closest(".availabilityRow");
+      if(row) row.classList.toggle("off", !toggle.checked);
+    });
+
+    list.addEventListener("input", (event) => {
+      const input = event.target.closest("[data-replacement]");
+      if(!input) return;
+      const name = input.getAttribute("data-replacement");
+      const next = loadExerciseSettings();
+      const value = String(input.value || "").trim().slice(0, 80);
+      if(value) next.replacements[name] = value;
+      else delete next.replacements[name];
+      saveExerciseSettings(next);
+    });
+
+    document.getElementById("btnAvailabilityReset").addEventListener("click", () => {
+      localStorage.removeItem(LS_EXERCISE_SETTINGS_KEY);
+      openExerciseAvailability();
+    });
+    document.getElementById("btnAvailabilityBack").addEventListener("click", () => {
+      openPracticeModeSelector();
+    });
+  }
+
   function openPracticeModeSelector(){
     const current = getPracticeMode();
     const kbOnly = getKettlebellOnly();
@@ -2579,6 +2790,7 @@ function computeBand(total){
             <div class="row">
               <button id="btnStartCalibration" class="btn mid">Start Calibration</button>
               <button id="btnKbOnly" class="btn ${kbOnly ? 'good' : ''}">KB Only: ${kbOnly ? 'On' : 'Off'}</button>
+              <button id="btnExerciseAvailability" class="btn">Exercise availability</button>
             </div>
           </div>
 
@@ -2633,6 +2845,10 @@ function computeBand(total){
     document.getElementById("btnKbOnly").addEventListener("click", () => {
       saveKettlebellOnly(!getKettlebellOnly());
       openPracticeModeSelector();
+    });
+
+    document.getElementById("btnExerciseAvailability").addEventListener("click", () => {
+      openExerciseAvailability();
     });
 
     document.getElementById("btnStartCalibration").addEventListener("click", () => {
@@ -2694,6 +2910,7 @@ function computeBand(total){
       localStorage.removeItem(LS_HYPERTROPHY_QUEUE_KEY);
       localStorage.removeItem(LS_BELL_LEVEL_KEY);
       localStorage.removeItem(LS_ZEN_SECONDS_KEY);
+      localStorage.removeItem(LS_EXERCISE_SETTINGS_KEY);
       localStorage.removeItem("dtt_pull_mode_v1");
       Object.values(timers).forEach(t => { try{ t && t.pause && t.pause(); }catch{} });
       releaseWakeLock();
