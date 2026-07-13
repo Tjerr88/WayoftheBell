@@ -735,7 +735,17 @@
     "get-up",
     "overhead-carry",
     "suitcase-carry",
-    "front-rack-carry"
+    "front-rack-carry",
+    "crunch",
+    "reverse-crunch",
+    "side-bend",
+    "half-kneeling-windmill",
+    "wood-chopper",
+    "bicep-curl",
+    "tricep-extension",
+    "lateral-raise",
+    "rear-delt-fly",
+    "calf-raise"
   ]);
   function exerciseSlug(name){
     return String(name || "")
@@ -863,7 +873,8 @@
     const ex = String(name || "").toLowerCase();
     return ex.includes("mace") || ex.includes("swing") || ex.includes("cast") || ex.includes("10-2") || ex.includes("pendulum") || ex.includes("high pull") || ex.includes("clean") || ex.includes("snatch") || ex.includes("push press") || ex.includes("jerk");
   }
-  function formatExtraPrescription(){
+  function formatExtraPrescription(name){
+    if(name === "Half-Kneeling Windmill") return "2 x 5-8";
     return "2 x 10-15";
   }
 
@@ -1902,7 +1913,7 @@ function computeBand(total){
       totalEl.textContent = String(total);
       const b = computeBand(total);
       bandEl.className = `badge ${b.cls}`;
-      bandEl.textContent = b.label;
+      bandEl.textContent = scores.soreness === 0 ? 'Pain → Recovery' : b.label;
       // update selected text labels
       gateDef.forEach(g => {
         const v = scores[g.key];
@@ -1939,7 +1950,8 @@ function computeBand(total){
     btnStart.addEventListener('click', () => {
       const total = Object.values(scores).reduce((a,b)=>a+b,0);
       const band = computeBand(total).band;
-      const gateMode = (band === 'GOOD') ? 'FULL' : (band === 'MID') ? 'MINI' : 'RECOVERY';
+      const painSelected = scores.soreness === 0;
+      const gateMode = painSelected ? 'RECOVERY' : (band === 'GOOD') ? 'FULL' : (band === 'MID') ? 'MINI' : 'RECOVERY';
       const tc = loadTrainCount();
       const sessionNumber = (tc.n || 0) + 1;
       const rhythm = applyPracticeRhythm(gateMode, sessionNumber);
@@ -1948,7 +1960,7 @@ function computeBand(total){
       const trainingNumber = nextProgressionTrainingNumber(mode, practiceMode);
 
       // lock gate for today
-      saveDayState({ day: todayKey(), scores, total, modeLocked: mode, rhythmReason: rhythm.reason, sessionNumber, trainingNumber });
+      saveDayState({ day: todayKey(), scores, total, modeLocked: mode, rhythmReason: painSelected ? 'pain' : rhythm.reason, sessionNumber, trainingNumber });
 
       // create active state
       if(mode === 'FULL' || mode === 'MINI'){
@@ -2042,6 +2054,7 @@ function computeBand(total){
     const circuitSeconds = getCircuitSeconds(mode, practiceMode, trainingNumber);
     const focusPrescription = formatHypertrophyFocusPrescription(trainingStyle);
     const carryImageSrc = session && session.carry ? exerciseImageSrc(session.carryBase || session.carry) : null;
+    const optionalImageSrc = session && session.optional ? exerciseImageSrc(session.optionalBase || session.optional) : null;
 
     leftCard.innerHTML = `
       <h2>Today</h2>
@@ -2083,7 +2096,10 @@ function computeBand(total){
           <div class="ex-title">${escapeHTML(session.optional)}</div>
           <div class="ex-meta">${formatExtraPrescription(session.optionalBase || session.optional)}</div>
         </div>
-        <div class="pill">${session.optionalType === "hypertrophy" ? "Hypertrophy" : "Core"}</div>
+        <div class="exercise-media">
+          ${optionalImageSrc ? `<button class="exercise-thumb-btn" type="button" data-ex-img="${optionalImageSrc}" data-ex-name="${escapeHTML(session.optional)}" aria-label="Show ${escapeHTML(session.optional)} image"><img class="exercise-thumb" src="${optionalImageSrc}" alt="${escapeHTML(session.optional)} visual reminder" loading="lazy"></button>` : ``}
+          <div class="pill">${session.optionalType === "hypertrophy" ? "Hypertrophy" : "Core"}</div>
+        </div>
       </div>` : ``}
 
       ${mode === 'MINI' ? `

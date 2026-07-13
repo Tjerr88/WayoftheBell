@@ -1,4 +1,4 @@
-const CACHE_NAME = "way-of-the-bell-v27";
+const CACHE_NAME = "way-of-the-bell-v29";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,7 +9,17 @@ const APP_SHELL = [
   "./favicon-64.png",
   "./icon-192.png",
   "./icon-512.png",
-  "./icon-maskable-512.png"
+  "./icon-maskable-512.png",
+  "./ex-crunch.webp",
+  "./ex-reverse-crunch.webp",
+  "./ex-side-bend.webp",
+  "./ex-half-kneeling-windmill.webp",
+  "./ex-wood-chopper.webp",
+  "./ex-bicep-curl.webp",
+  "./ex-tricep-extension.webp",
+  "./ex-lateral-raise.webp",
+  "./ex-rear-delt-fly.webp",
+  "./ex-calf-raise.webp"
 ];
 
 self.addEventListener("install", event => {
