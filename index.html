@@ -552,17 +552,22 @@
 
   const DUR = { carrySec: 5*60, zone2Sec: 20*60, mobilitySec: 25*60 };
 
-  const EVERYTHING_ELSE_NORMAL = [
-    "Bicep Curl",
-    "Tricep Extension",
-    "Lateral Raise",
-    "Ab Wheel Rollout",
-    "Beast Crawl",
-    "Dead Bug",
-    "Leg Raise",
-    "Side Bend",
-    "Wood Chopper"
-  ];
+  const EXTRA_POOLS = {
+    core: [
+      "Crunch",
+      "Reverse Crunch",
+      "Side Bend",
+      "Half-Kneeling Windmill",
+      "Wood Chopper"
+    ],
+    hypertrophy: [
+      "Bicep Curl",
+      "Tricep Extension",
+      "Lateral Raise",
+      "Rear Delt Fly",
+      "Calf Raise"
+    ]
+  };
 
   const LIB = {
     squat: { label:"Squat", subcats:{
@@ -642,8 +647,8 @@
       kbOnlyPill.innerHTML = `KB Only: <strong>${getKettlebellOnly() ? "on" : "off"}</strong>`;
     }
   }
-  function getEverythingElsePool(){
-    return EVERYTHING_ELSE_NORMAL.slice();
+  function getExtraPool(type){
+    return (EXTRA_POOLS[type] || EXTRA_POOLS.core).slice();
   }
 
   function getTodayLesson(){
@@ -787,7 +792,10 @@
       });
     }
     groups.push({ label:"Carry", subgroups:[{ label:"Loaded Carry", exercises:CARRIES.slice() }] });
-    groups.push({ label:"Everything Else", subgroups:[{ label:"Accessories", exercises:EVERYTHING_ELSE_NORMAL.slice() }] });
+    groups.push({ label:"Extras", subgroups:[
+      { label:"Core", exercises:EXTRA_POOLS.core.slice() },
+      { label:"Hypertrophy", exercises:EXTRA_POOLS.hypertrophy.slice() }
+    ] });
     return groups;
   }
   function openExercisePreview(name, src){
@@ -855,11 +863,8 @@
     const ex = String(name || "").toLowerCase();
     return ex.includes("mace") || ex.includes("swing") || ex.includes("cast") || ex.includes("10-2") || ex.includes("pendulum") || ex.includes("high pull") || ex.includes("clean") || ex.includes("snatch") || ex.includes("push press") || ex.includes("jerk");
   }
-  function formatExtraPrescription(name){
-    const ex = String(name || "").toLowerCase();
-    if(ex.includes("curl") || ex.includes("tricep") || ex.includes("leg raise")) return "2 x 8-12";
-    if(ex.includes("ab wheel")) return "2 x 5";
-    return `2 x ${isBallisticExtraExercise(name) ? 10 : 5}`;
+  function formatExtraPrescription(){
+    return "2 x 10-15";
   }
 
   // --- Practice session counter
@@ -1267,7 +1272,13 @@
   // Memory model for generation
   // -------------------------
   function defaultMemory(){
-    const mem = { lastCarry:null, lastEverythingElse:null, everythingElseBag:[], patterns:{} };
+    const mem = {
+      lastCarry:null,
+      nextExtraType:"core",
+      lastExtraByType:{ core:null, hypertrophy:null },
+      extraBags:{ core:[], hypertrophy:[] },
+      patterns:{}
+    };
     for(const p of Object.keys(LIB)){
       mem.patterns[p] = { lastSubcat:null, lastExerciseBySubcat:{}, subcatBag:[], exerciseBags:{} };
       for(const sc of Object.keys(LIB[p].subcats)){
@@ -1283,10 +1294,17 @@
     const mem = defaultMemory();
     try{
       if(parsed.lastCarry) mem.lastCarry = parsed.lastCarry;
-      if(parsed.lastEverythingElse) mem.lastEverythingElse = parsed.lastEverythingElse;
-      if(Array.isArray(parsed.everythingElseBag)){
-        const pool = getEverythingElsePool();
-        mem.everythingElseBag = parsed.everythingElseBag.filter(ex => pool.includes(ex));
+      if(parsed.nextExtraType === "core" || parsed.nextExtraType === "hypertrophy"){
+        mem.nextExtraType = parsed.nextExtraType;
+      }
+      for(const type of Object.keys(EXTRA_POOLS)){
+        const pool = getExtraPool(type);
+        if(parsed.lastExtraByType && pool.includes(parsed.lastExtraByType[type])){
+          mem.lastExtraByType[type] = parsed.lastExtraByType[type];
+        }
+        if(parsed.extraBags && Array.isArray(parsed.extraBags[type])){
+          mem.extraBags[type] = parsed.extraBags[type].filter(ex => pool.includes(ex));
+        }
       }
       if(parsed.patterns){
         for(const p of Object.keys(LIB)){
@@ -1504,11 +1522,12 @@
     return picked;
   }
 
-  function refillEverythingElseBag(mem){
+  function refillExtraBag(type, mem){
     const settings = loadExerciseSettings();
-    const available = availableFrom(getEverythingElsePool(), settings);
-    const pool = available.length ? available : getEverythingElsePool();
-    const last = mem.lastEverythingElse;
+    const fullPool = getExtraPool(type);
+    const available = availableFrom(fullPool, settings);
+    const pool = available.length ? available : fullPool;
+    const last = mem.lastExtraByType[type];
     let bag = shuffle(pool);
 
     if(last && bag.length > 1 && bag[0] === last){
@@ -1518,23 +1537,24 @@
       }
     }
 
-    mem.everythingElseBag = bag;
+    mem.extraBags[type] = bag;
   }
 
-  function pickEverythingElse(mem){
+  function pickExtra(type, mem){
     const settings = loadExerciseSettings();
-    const available = availableFrom(getEverythingElsePool(), settings);
-    const pool = available.length ? available : getEverythingElsePool();
-    if(!mem.everythingElseBag || !mem.everythingElseBag.length){
-      refillEverythingElseBag(mem);
+    const fullPool = getExtraPool(type);
+    const available = availableFrom(fullPool, settings);
+    const pool = available.length ? available : fullPool;
+    if(!mem.extraBags[type] || !mem.extraBags[type].length){
+      refillExtraBag(type, mem);
     }
 
-    let bag = mem.everythingElseBag.filter(ex => pool.includes(ex));
-    const last = mem.lastEverythingElse;
+    let bag = mem.extraBags[type].filter(ex => pool.includes(ex));
+    const last = mem.lastExtraByType[type];
 
     if(!bag.length){
-      refillEverythingElseBag(mem);
-      bag = mem.everythingElseBag;
+      refillExtraBag(type, mem);
+      bag = mem.extraBags[type];
     }
 
     if(last && bag.length > 1 && bag[0] === last){
@@ -1545,8 +1565,8 @@
     }
 
     const picked = bag.shift();
-    mem.everythingElseBag = bag;
-    mem.lastEverythingElse = picked;
+    mem.extraBags[type] = bag;
+    mem.lastExtraByType[type] = picked;
     return picked;
   }
 
@@ -1616,9 +1636,12 @@
 
     let optional = null;
     let optionalBase = null;
+    let optionalType = null;
     if(mode === "FULL"){
-      optionalBase = pickEverythingElse(mem);
+      optionalType = mem.nextExtraType === "hypertrophy" ? "hypertrophy" : "core";
+      optionalBase = pickExtra(optionalType, mem);
       optional = customExerciseName(optionalBase, exerciseSettings);
+      mem.nextExtraType = optionalType === "core" ? "hypertrophy" : "core";
     }
 
     const circuit = shuffle(picks);
@@ -1628,7 +1651,7 @@
     const carryBase = choice(carryAllowed.length ? carryAllowed : carryPool);
     const carry = customExerciseName(carryBase, exerciseSettings);
     mem.lastCarry = carryBase;
-    return { circuit, carry, carryBase, optional, optionalBase, memNext: mem };
+    return { circuit, carry, carryBase, optional, optionalBase, optionalType, memNext: mem };
   }
 
   // -------------------------
@@ -2060,7 +2083,7 @@ function computeBand(total){
           <div class="ex-title">${escapeHTML(session.optional)}</div>
           <div class="ex-meta">${formatExtraPrescription(session.optionalBase || session.optional)}</div>
         </div>
-        <div class="pill">Optional</div>
+        <div class="pill">${session.optionalType === "hypertrophy" ? "Hypertrophy" : "Core"}</div>
       </div>` : ``}
 
       ${mode === 'MINI' ? `
