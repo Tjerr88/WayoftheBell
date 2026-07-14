@@ -1,4 +1,4 @@
-const CACHE_NAME = "way-of-the-bell-v30";
+const CACHE_NAME = "way-of-the-bell-v31";
 const APP_SHELL = [
   "./",
   "./index.html",
