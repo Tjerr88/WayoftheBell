@@ -3148,7 +3148,7 @@ function computeBand(total){
   btnReset.addEventListener('click', () => {
     openModal({
       title: "Program reset",
-      text: "This clears selection memory, the active session, today's gate, training style, KB Only, hypertrophy rotation, and your Practice counter.",
+      text: "This clears all progress and settings, then returns to Choose your path.",
       bodyHTML: "",
       actionsHTML: `
         <button id="btnDoReset" class="btn danger">Reset</button>
@@ -3179,6 +3179,7 @@ function computeBand(total){
       localStorage.removeItem(LS_TRAIN_COUNT_KEY);
       localStorage.removeItem(LS_PROGRESS_COUNT_KEY);
       localStorage.removeItem(LS_FULL_STREAK_KEY);
+      localStorage.removeItem(LS_PRACTICE_MODE_KEY);
       localStorage.removeItem(LS_TRAINING_STYLE_KEY);
       localStorage.removeItem(LS_KB_ONLY_KEY);
       localStorage.removeItem(LS_HYPERTROPHY_QUEUE_KEY);
