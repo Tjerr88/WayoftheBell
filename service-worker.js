@@ -1,9 +1,11 @@
-const CACHE_NAME = "way-of-the-bell-v31";
+const CACHE_NAME = "way-of-the-bell-v36";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.json",
   "./brand-logo.png",
+  "./mode-progression.png",
+  "./mode-zen.png",
   "./scene-temple.jpg",
   "./scene-carry.jpg",
   "./favicon-64.png",

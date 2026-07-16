@@ -413,6 +413,32 @@
     .modalTitle{ font-size:15px; font-weight:900; margin:0 0 6px; }
     .modalText{ font-size:13px; color:var(--muted); margin:0; line-height:1.35; }
     .modalRow{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+    .modeChoiceCard{
+      flex:1 1 100%;
+      display:grid;
+      grid-template-columns:92px minmax(0, 1fr);
+      align-items:center;
+      gap:12px;
+      padding:8px;
+      text-align:left;
+    }
+    .modeChoiceArt{
+      width:92px;
+      height:92px;
+      overflow:hidden;
+      border-radius:7px;
+      background:#f4eee2;
+    }
+    .modeChoiceArt img{
+      display:block;
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      transform:scale(1.16);
+    }
+    .modeChoiceCopy{ display:grid; gap:4px; }
+    .modeChoiceCopy strong{ font-size:14px; }
+    .modeChoiceCopy small{ color:var(--muted); font-size:12px; line-height:1.3; font-weight:650; }
     .modalList{ display:grid; gap:8px; margin-top:10px; }
     .modalItem{
       border:1px solid var(--line);
@@ -545,6 +571,8 @@
   const LS_KB_ONLY_KEY = "cw_kb_only_v1";
   const LS_HYPERTROPHY_QUEUE_KEY = "cw_hypertrophy_queue_v1";
   const LS_BELL_LEVEL_KEY = "cw_bell_level_v1";
+  const LS_START_CALIBRATION_KEY = "wotb_start_calibration_v1";
+  const LS_ONBOARDING_KEY = "wotb_onboarding_v1";
   const LS_ZEN_SECONDS_KEY = "wotb_zen_seconds_v1";
   const LS_LESSON_DAY_KEY = "cw_lesson_day_v3";
   const LS_LESSON_TODAY_KEY = "cw_lesson_today_v3";
@@ -1032,88 +1060,180 @@
     });
   }
 
-  // --- Checkpoint: progression cycle check (after 60 completed FULL/MINI sessions)
-  function showCheckpointModal(){
-    const style = getTrainingStyle();
-    const isHypertrophy = style === "hypertrophy";
-    const isStrength = style === "strength";
-    if(!isHypertrophy && !isStrength) return;
+  // --- Benchmark after 60 completed FULL/MINI progression sessions.
+  // The benchmark and its optional Zone 2 finish never increment a session counter.
+  function finishBenchmarkDecision({ bellLevel, style, result }){
+    saveBellLevel(bellLevel);
+    saveTrainingStyle(style);
+    resetProgressionCycle();
+    closeModal();
+    saveActive({
+      day: todayKey(),
+      mode: "BENCHMARK",
+      phase: "BENCHMARK_ZONE2",
+      benchmarkResult: result,
+      timers: { zone2Left: DUR.zone2Sec }
+    });
+    boot();
+  }
 
-    const bellLevel = getBellLevel();
-    const question = isHypertrophy
-      ? "Test the Military Press with the next bell. What clean rep range do you own?"
-      : "Can you Military Press this bell for 6-12 clean reps?";
-    const body = `
-      <p class="modalText">
-        ${isHypertrophy
-          ? "After 60 Hypertrophy training sessions (FULL or MINI), this decides whether the next bell begins with Strength, Hypertrophy, or another Hypertrophy block at the current bell."
-          : "After 60 Strength training sessions (FULL or MINI), if yes, stay on this bell and run a 60-session Hypertrophy cycle."}
-      </p>
-      <p class="modalText" style="margin-top:10px;">Current bell step: <b>+${bellLevel}</b></p>
-    `;
-
+  function showHypertrophyBenchmarkSecondBell(bellLevel){
     openModal({
-      title: "Progression Checkpoint",
-      text: question,
-      bodyHTML: body,
-      actionsHTML: isHypertrophy ? `
-        <button id="btnCpRepeat" class="btn primary">&lt;3 reps - repeat Hypertrophy</button>
-        <button id="btnCpStrength" class="btn good">3-5 reps - +1 bell Strength</button>
-        <button id="btnCpHypertrophy" class="btn mid">6-12 reps - +1 bell Hypertrophy</button>
-        <button id="btnCpLater" class="btn">Later</button>
-      ` : `
-        <button id="btnCpYes" class="btn good">Yes - start Hypertrophy</button>
-        <button id="btnCpNo" class="btn primary">No - repeat Strength</button>
-        <button id="btnCpLater" class="btn">Later</button>
+      title: "Benchmark - test +8 kg",
+      text: "Rest fully, then Military Press the bell two steps above your previous training bell.",
+      bodyHTML: `
+        <p class="modalText">Use only clean reps. Stop when the next rep would require leaning, grinding, or losing control.</p>
+        <p class="modalText" style="margin-top:10px;">This is the final strength search; do not test another heavier bell today.</p>
+      `,
+      actionsHTML: `
+        <button id="btnBenchH2Heavy" class="btn mid">&lt;3 reps</button>
+        <button id="btnBenchH2Strength" class="btn good">3-5 reps</button>
+        <button id="btnBenchH2SixPlus" class="btn primary">6+ reps</button>
+        <button id="btnBenchLater" class="btn">Test later</button>
       `
     });
 
-    document.getElementById("btnCpLater").addEventListener("click", () => {
-      closeModal();
+    document.getElementById("btnBenchH2Heavy").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel: bellLevel + 1,
+      style: "hypertrophy",
+      result: "The +8 kg bell is too heavy. Start Hypertrophy with the +4 kg bell."
+    }));
+    document.getElementById("btnBenchH2Strength").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel: bellLevel + 2,
+      style: "strength",
+      result: "Start Strength with the +8 kg bell."
+    }));
+    document.getElementById("btnBenchH2SixPlus").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel: bellLevel + 2,
+      style: "strength",
+      result: "Start Strength with the +8 kg bell."
+    }));
+    document.getElementById("btnBenchLater").addEventListener("click", closeModal);
+  }
+
+  function showStrengthBenchmarkNextBellChoice(bellLevel){
+    openModal({
+      title: "Benchmark - choose the next focus",
+      text: "The +4 kg bell produced 3-5 clean reps.",
+      bodyHTML: `<p class="modalText">Both paths are valid. Progressing to the heavier bell keeps the strength focus; choosing Hypertrophy preserves the phase change.</p>`,
+      actionsHTML: `
+        <button id="btnBenchChooseStrength" class="btn good">Strength with +4 kg (recommended)</button>
+        <button id="btnBenchChooseHypertrophy" class="btn mid">Hypertrophy with current bell</button>
+        <button id="btnBenchLater" class="btn">Decide later</button>
+      `
     });
 
-    const resetCycle = () => {
-      saveProgressCount({ n: 0 });
-      saveFullStreak({ n: 0 });
-      updateTrainPill();
-    };
+    document.getElementById("btnBenchChooseStrength").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel: bellLevel + 1,
+      style: "strength",
+      result: "Continue Strength with the +4 kg bell."
+    }));
+    document.getElementById("btnBenchChooseHypertrophy").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel,
+      style: "hypertrophy",
+      result: "Start Hypertrophy with the current bell."
+    }));
+    document.getElementById("btnBenchLater").addEventListener("click", closeModal);
+  }
 
-    if(isHypertrophy){
-      document.getElementById("btnCpRepeat").addEventListener("click", () => {
-        resetCycle();
-        closeModal();
-        boot();
+  function showStrengthBenchmarkNextBell(bellLevel){
+    openModal({
+      title: "Benchmark - test +4 kg",
+      text: "Military Press the next bell for one clean-rep-max set.",
+      bodyHTML: `<p class="modalText">Rest fully before testing. This result selects the bell and focus for the next cycle.</p>`,
+      actionsHTML: `
+        <button id="btnBenchS2Heavy" class="btn mid">&lt;3 reps</button>
+        <button id="btnBenchS2Choice" class="btn primary">3-5 reps</button>
+        <button id="btnBenchS2Hyper" class="btn good">6-12 reps</button>
+        <button id="btnBenchS2Light" class="btn good">&gt;12 reps</button>
+        <button id="btnBenchLater" class="btn">Test later</button>
+      `
+    });
+
+    document.getElementById("btnBenchS2Heavy").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel,
+      style: "hypertrophy",
+      result: "The +4 kg bell is too heavy. Start Hypertrophy with the current bell."
+    }));
+    document.getElementById("btnBenchS2Choice").addEventListener("click", () => showStrengthBenchmarkNextBellChoice(bellLevel));
+    document.getElementById("btnBenchS2Hyper").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel: bellLevel + 1,
+      style: "hypertrophy",
+      result: "Start Hypertrophy with the +4 kg bell."
+    }));
+    document.getElementById("btnBenchS2Light").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel: bellLevel + 1,
+      style: "hypertrophy",
+      result: "Start Hypertrophy with the +4 kg bell."
+    }));
+    document.getElementById("btnBenchLater").addEventListener("click", closeModal);
+  }
+
+  function showCheckpointModal(){
+    const style = getTrainingStyle();
+    const bellLevel = getBellLevel();
+    if(style !== "hypertrophy" && style !== "strength") return;
+
+    if(style === "hypertrophy"){
+      openModal({
+        title: "60-session Benchmark",
+        text: "Strength is the first goal: Military Press the +4 kg bell for one clean-rep-max set.",
+        bodyHTML: `
+          <p class="modalText">Warm up first. This Benchmark chooses the bell and focus for the next cycle and does not count as a session.</p>
+          <p class="modalText" style="margin-top:10px;">Current bell step: <b>+${bellLevel}</b></p>
+        `,
+        actionsHTML: `
+          <button id="btnBenchHHeavy" class="btn mid">&lt;3 reps</button>
+          <button id="btnBenchHStrength" class="btn good">3-7 reps</button>
+          <button id="btnBenchHNext" class="btn primary">8-12 reps</button>
+          <button id="btnBenchHVeryLight" class="btn primary">&gt;12 reps</button>
+          <button id="btnBenchLater" class="btn">Test later</button>
+        `
       });
 
-      document.getElementById("btnCpStrength").addEventListener("click", () => {
-        saveBellLevel(bellLevel + 1);
-        saveTrainingStyle("strength");
-        resetCycle();
-        closeModal();
-        boot();
-      });
-
-      document.getElementById("btnCpHypertrophy").addEventListener("click", () => {
-        saveBellLevel(bellLevel + 1);
-        saveTrainingStyle("hypertrophy");
-        resetCycle();
-        closeModal();
-        boot();
-      });
-    } else {
-      document.getElementById("btnCpYes").addEventListener("click", () => {
-        saveTrainingStyle("hypertrophy");
-        resetCycle();
-        closeModal();
-        boot();
-      });
-
-      document.getElementById("btnCpNo").addEventListener("click", () => {
-        resetCycle();
-        closeModal();
-        boot();
-      });
+      document.getElementById("btnBenchHHeavy").addEventListener("click", () => finishBenchmarkDecision({
+        bellLevel,
+        style: "hypertrophy",
+        result: "The +4 kg bell is too heavy. Repeat Hypertrophy with the current bell."
+      }));
+      document.getElementById("btnBenchHStrength").addEventListener("click", () => finishBenchmarkDecision({
+        bellLevel: bellLevel + 1,
+        style: "strength",
+        result: "Start Strength with the +4 kg bell."
+      }));
+      document.getElementById("btnBenchHNext").addEventListener("click", () => showHypertrophyBenchmarkSecondBell(bellLevel));
+      document.getElementById("btnBenchHVeryLight").addEventListener("click", () => showHypertrophyBenchmarkSecondBell(bellLevel));
+      document.getElementById("btnBenchLater").addEventListener("click", closeModal);
+      return;
     }
+
+    openModal({
+      title: "60-session Benchmark",
+      text: "Hypertrophy is the first goal: Military Press your current bell for one clean-rep-max set.",
+      bodyHTML: `
+        <p class="modalText">Warm up first. This Benchmark chooses the bell and focus for the next cycle and does not count as a session.</p>
+        <p class="modalText" style="margin-top:10px;">Current bell step: <b>+${bellLevel}</b></p>
+      `,
+      actionsHTML: `
+        <button id="btnBenchSRepeat" class="btn primary">&lt;6 reps</button>
+        <button id="btnBenchSHyper" class="btn good">6-12 reps</button>
+        <button id="btnBenchSNext" class="btn mid">&gt;12 reps</button>
+        <button id="btnBenchLater" class="btn">Test later</button>
+      `
+    });
+
+    document.getElementById("btnBenchSRepeat").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel,
+      style: "strength",
+      result: "Repeat Strength with the current bell."
+    }));
+    document.getElementById("btnBenchSHyper").addEventListener("click", () => finishBenchmarkDecision({
+      bellLevel,
+      style: "hypertrophy",
+      result: "Start Hypertrophy with the current bell."
+    }));
+    document.getElementById("btnBenchSNext").addEventListener("click", () => showStrengthBenchmarkNextBell(bellLevel));
+    document.getElementById("btnBenchLater").addEventListener("click", closeModal);
   }
 
   function maybeShowCheckpoint(){
@@ -1131,14 +1251,105 @@
     updateTrainPill();
   }
 
+  function completeOnboarding(){
+    localStorage.setItem(LS_ONBOARDING_KEY, "1");
+  }
+
+  function shouldShowFirstRunOnboarding(){
+    return localStorage.getItem(LS_ONBOARDING_KEY) !== "1"
+      && localStorage.getItem(LS_PRACTICE_MODE_KEY) === null
+      && (loadTrainCount().n || 0) === 0
+      && !loadDayState()
+      && !loadActive();
+  }
+
+  function openZenOnboardingFocus(){
+    openModal({
+      title: "Choose your Zen focus",
+      text: "You can change this later in Options.",
+      actionsHTML: `
+        <button id="btnOnboardStrength" class="btn primary">Strength - 3-5 reps</button>
+        <button id="btnOnboardHybrid" class="btn good">Hybrid - one 8-12 focus lift; other lifts 5 reps</button>
+        <button id="btnOnboardHypertrophy" class="btn mid">Hypertrophy - 6-12 reps</button>
+      `
+    });
+
+    const finishZen = (style) => {
+      saveTrainingStyle(style);
+      completeOnboarding();
+      closeModal();
+      boot();
+    };
+    document.getElementById("btnOnboardStrength").addEventListener("click", () => finishZen("strength"));
+    document.getElementById("btnOnboardHybrid").addEventListener("click", () => finishZen("hybrid"));
+    document.getElementById("btnOnboardHypertrophy").addEventListener("click", () => finishZen("hypertrophy"));
+  }
+
+  function openZenOnboardingTime(){
+    openModal({
+      title: "Choose your Zen session length",
+      text: "Zen keeps the session length you choose.",
+      actionsHTML: `
+        <button id="btnOnboardZen20" class="btn good">20 minutes</button>
+        <button id="btnOnboardZen25" class="btn">25 minutes</button>
+        <button id="btnOnboardZen30" class="btn">30 minutes</button>
+      `
+    });
+
+    const chooseTime = (seconds) => {
+      saveZenSeconds(seconds);
+      openZenOnboardingFocus();
+    };
+    document.getElementById("btnOnboardZen20").addEventListener("click", () => chooseTime(20*60));
+    document.getElementById("btnOnboardZen25").addEventListener("click", () => chooseTime(25*60));
+    document.getElementById("btnOnboardZen30").addEventListener("click", () => chooseTime(30*60));
+  }
+
+  function openFirstRunOnboarding(){
+    openModal({
+      title: "Choose your path",
+      text: "Select how you want to begin. You can change modes later in Options.",
+      actionsHTML: `
+        <button id="btnOnboardProgression" class="btn primary modeChoiceCard">
+          <span class="modeChoiceArt"><img src="mode-progression.png" alt="" aria-hidden="true"></span>
+          <span class="modeChoiceCopy"><strong>Progression</strong><small>Guided 60-session cycles</small></span>
+        </button>
+        <button id="btnOnboardZen" class="btn good modeChoiceCard">
+          <span class="modeChoiceArt"><img src="mode-zen.png" alt="" aria-hidden="true"></span>
+          <span class="modeChoiceCopy"><strong>Zen</strong><small>Choose your time and focus</small></span>
+        </button>
+      `
+    });
+
+    document.getElementById("btnOnboardProgression").addEventListener("click", () => {
+      savePracticeMode("progression");
+      completeOnboarding();
+      openStartCalibration();
+    });
+    document.getElementById("btnOnboardZen").addEventListener("click", () => {
+      savePracticeMode("zen");
+      openZenOnboardingTime();
+    });
+  }
+
+  function completeStartCalibration(style){
+    resetProgressionCycle();
+    saveTrainingStyle(style);
+    localStorage.setItem(LS_START_CALIBRATION_KEY, "1");
+    closeModal();
+    // Continue into the normal Recovery Gate. The resulting workout is session 1/60.
+    boot();
+  }
+
   function openStartCalibration(){
     openModal({
       title: "Start Calibration",
-      text: "Test one clean-rep-max range for the Military Press with your current bell.",
+      text: "Perform one calm technical Military Press test with your chosen current bell.",
       bodyHTML: `
         <p class="modalText">
-          Choose the range that matches your best clean set today. This sets the first Progression cycle.
+          Stop before grinding or losing position. Choose the clean rep range you own today; this sets the first Progression cycle.
         </p>
+        <p class="modalText" style="margin-top:10px;">The calibration does not count. Afterwards, complete the normal Recovery Gate and train for 20 minutes; that workout becomes session 1/60.</p>
       `,
       actionsHTML: `
         <button id="btnCalHeavy" class="btn danger">&lt;3 reps</button>
@@ -1168,17 +1379,11 @@
     });
 
     document.getElementById("btnCalStrength").addEventListener("click", () => {
-      resetProgressionCycle();
-      saveTrainingStyle("strength");
-      closeModal();
-      boot();
+      completeStartCalibration("strength");
     });
 
     document.getElementById("btnCalHypertrophy").addEventListener("click", () => {
-      resetProgressionCycle();
-      saveTrainingStyle("hypertrophy");
-      closeModal();
-      boot();
+      completeStartCalibration("hypertrophy");
     });
 
     document.getElementById("btnCalLight").addEventListener("click", () => {
@@ -2040,6 +2245,27 @@ function computeBand(total){
     }
   }
 
+  function renderBenchmarkZone2(active){
+    leftCard.innerHTML = `
+      <h2>Benchmark complete</h2>
+      <p class="small">${escapeHTML(active.benchmarkResult || "The next progression cycle is ready.")}</p>
+      <div class="hr"></div>
+      <h2>Deload - 20 minutes Zone 2</h2>
+      <p class="small">Easy aerobic work at a nasal-breathing pace. The Benchmark and this deload do not count as a training session.</p>
+      <div class="hr"></div>
+      <button id="btnFinishBenchmark" class="btn good">Finish deload day</button>
+    `;
+    setModePill("BENCHMARK");
+    startZone2(false);
+    document.getElementById("btnFinishBenchmark").addEventListener("click", () => {
+      if(timers.zone2) timers.zone2.pause();
+      releaseWakeLock();
+      clearActive();
+      confettiBurst();
+      boot();
+    });
+  }
+
   // -------------------------
   // Training screen
   // -------------------------
@@ -2612,6 +2838,7 @@ function computeBand(total){
       btnMain.textContent = 'Options';
       // route by phase
       if(active.phase === 'TRAINING') return renderTraining(active);
+      if(active.phase === 'BENCHMARK_ZONE2') return renderBenchmarkZone2(active);
       if(active.phase === 'MOBILITY')  return renderMobility(active);
       if(active.phase === 'WALK')      return renderWalk(active);
       if(active.phase === 'BREATHING') return renderBreathing(active);
@@ -2668,6 +2895,7 @@ function computeBand(total){
     // default: gate
     btnMain.textContent = 'Options';
     renderGate(null);
+    if(shouldShowFirstRunOnboarding()) openFirstRunOnboarding();
   }
 
   function forceActiveRecovery(){
@@ -2851,7 +3079,14 @@ function computeBand(total){
 
     document.getElementById("btnModeProgression").addEventListener("click", () => {
       savePracticeMode("progression");
-      openPracticeModeSelector();
+      const firstProgressionStart = localStorage.getItem(LS_START_CALIBRATION_KEY) !== "1"
+        && (loadTrainCount().n || 0) === 0
+        && (loadProgressCount().n || 0) === 0;
+      if(firstProgressionStart){
+        openStartCalibration();
+      } else {
+        openPracticeModeSelector();
+      }
     });
 
     const bindZenTime = (id, seconds) => {
@@ -2948,6 +3183,8 @@ function computeBand(total){
       localStorage.removeItem(LS_KB_ONLY_KEY);
       localStorage.removeItem(LS_HYPERTROPHY_QUEUE_KEY);
       localStorage.removeItem(LS_BELL_LEVEL_KEY);
+      localStorage.removeItem(LS_START_CALIBRATION_KEY);
+      localStorage.removeItem(LS_ONBOARDING_KEY);
       localStorage.removeItem(LS_ZEN_SECONDS_KEY);
       localStorage.removeItem(LS_EXERCISE_SETTINGS_KEY);
       localStorage.removeItem("dtt_pull_mode_v1");
